@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useDropzone } from 'react-dropzone';
-import { FileUp, FileText, Upload, Trash2, Download, Check, AlertTriangle, RefreshCw, ChevronRight } from 'lucide-react';
+import { FileUp, FileText, Upload, Trash2, Download, Check, AlertTriangle, RefreshCw, ChevronRight, Settings, Shield } from 'lucide-react';
 import { FileProcessingService, ProcessedFile } from '@/services/FileProcessingService';
 import { AIService, StatementGenerationOptions } from '@/services/AIService';
 import { StorageService } from '@/services/StorageService';
