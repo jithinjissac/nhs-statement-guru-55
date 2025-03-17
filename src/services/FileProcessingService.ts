@@ -2,10 +2,6 @@
 import mammoth from 'mammoth';
 import * as pdfjs from 'pdfjs-dist';
 
-// Dynamically import the PDF.js worker
-const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.entry');
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-
 export type ProcessedFile = {
   fileName: string;
   fileType: string;
@@ -14,10 +10,24 @@ export type ProcessedFile = {
 };
 
 export class FileProcessingService {
+  private static workerInitialized = false;
+
+  private static async initializeWorker() {
+    if (!this.workerInitialized) {
+      // Dynamically import the PDF.js worker without top-level await
+      const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.entry');
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+      this.workerInitialized = true;
+    }
+  }
+
   /**
    * Process a file and extract its content
    */
   static async processFile(file: File): Promise<ProcessedFile> {
+    // Ensure worker is initialized before processing
+    await this.initializeWorker();
+    
     const fileType = file.type;
     let content = '';
 
