@@ -9,6 +9,8 @@ import { AIService, CVAnalysisResult } from '@/services/AIService';
 import { toast } from 'sonner';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 
 interface CVAnalyzerProps {
   cv: string;
@@ -22,6 +24,9 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [analysis, setAnalysis] = useState<CVAnalysisResult | null>(null);
   const [tailoredStatement, setTailoredStatement] = useState('');
   const [additionalExperience, setAdditionalExperience] = useState('');
+  const [additionalQualifications, setAdditionalQualifications] = useState('');
+  const [additionalSkills, setAdditionalSkills] = useState('');
+  const [unmatchedResponses, setUnmatchedResponses] = useState<Record<string, string>>({});
   const [activeStep, setActiveStep] = useState(1);
 
   // Analyze CV automatically when component loads if CV and job description are available
@@ -40,7 +45,14 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     setIsAnalyzing(true);
     try {
       console.log("Starting CV analysis");
-      const result = await AIService.analyzeCV(cv, jobDescription, additionalExperience);
+      // Combine all additional information
+      const combinedAdditionalInfo = [
+        additionalExperience && `Additional Experience: ${additionalExperience}`,
+        additionalQualifications && `Additional Qualifications: ${additionalQualifications}`,
+        additionalSkills && `Additional Skills: ${additionalSkills}`
+      ].filter(Boolean).join('\n\n');
+      
+      const result = await AIService.analyzeCV(cv, jobDescription, combinedAdditionalInfo);
       console.log("Analysis result:", result);
       setAnalysis(result);
       setActiveStep(2);
@@ -53,6 +65,13 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     }
   };
 
+  const handleUnmatchedResponse = (requirement: string, response: string) => {
+    setUnmatchedResponses(prev => ({
+      ...prev,
+      [requirement]: response
+    }));
+  };
+
   const generateTailoredStatement = async () => {
     if (!cv || !jobDescription) {
       toast.error('Please upload both your CV and the job description first');
@@ -61,10 +80,20 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
 
     setIsGenerating(true);
     try {
+      // Combine all additional information including unmatched responses
+      const additionalInfo = [
+        additionalExperience && `Additional Experience: ${additionalExperience}`,
+        additionalQualifications && `Additional Qualifications: ${additionalQualifications}`,
+        additionalSkills && `Additional Skills: ${additionalSkills}`,
+        ...Object.entries(unmatchedResponses).map(([req, resp]) => 
+          `Regarding "${req.replace(/^\[(Essential|Desirable)\]\s*/i, '')}": ${resp}`
+        )
+      ].filter(Boolean).join('\n\n');
+      
       const result = await AIService.generateTailoredStatement(
         cv,
         jobDescription,
-        additionalExperience,
+        additionalInfo,
         'simple' // Fixed to simple style (GCSE level)
       );
       
@@ -109,28 +138,49 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>CV Analysis & Statement Generation</CardTitle>
+          <CardTitle>CV & Job Description Analysis</CardTitle>
           <CardDescription>
-            Analysis results based on your CV and job description
+            Comprehensive analysis of your CV against job requirements
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-8">
-            {/* Additional Experience Input */}
+            {/* Additional Information Inputs */}
             <Card className="border border-muted">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Additional Experience</CardTitle>
+                <CardTitle className="text-base">Additional Information</CardTitle>
                 <CardDescription>
-                  Add any relevant experience not mentioned in your CV
+                  Add any relevant information not mentioned in your CV
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Textarea
-                  placeholder="Describe any additional experiences relevant to this job that may not be in your CV..."
-                  value={additionalExperience}
-                  onChange={(e) => setAdditionalExperience(e.target.value)}
-                  className="min-h-[120px]"
-                />
+              <CardContent className="space-y-4">
+                <div>
+                  <FormLabel>Additional Experience</FormLabel>
+                  <Textarea
+                    placeholder="Describe any additional experiences relevant to this job that may not be in your CV..."
+                    value={additionalExperience}
+                    onChange={(e) => setAdditionalExperience(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                </div>
+                <div>
+                  <FormLabel>Additional Qualifications</FormLabel>
+                  <Textarea
+                    placeholder="List any additional qualifications not mentioned in your CV..."
+                    value={additionalQualifications}
+                    onChange={(e) => setAdditionalQualifications(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                </div>
+                <div>
+                  <FormLabel>Additional Skills</FormLabel>
+                  <Textarea
+                    placeholder="List any additional skills not mentioned in your CV..."
+                    value={additionalSkills}
+                    onChange={(e) => setAdditionalSkills(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                </div>
                 <div className="flex justify-end mt-4">
                   <Button 
                     variant="outline" 
@@ -262,6 +312,33 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                       </CardContent>
                     </Card>
                     
+                    {/* Job Description Summary */}
+                    <Card className="border border-muted">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Job Description Summary</CardTitle>
+                        <CardDescription>
+                          Key elements from the job description
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* NHS Values Section */}
+                        <div className="space-y-2">
+                          <h5 className="text-sm font-medium">NHS Values Identified</h5>
+                          <div className="flex flex-wrap gap-2">
+                            {analysis.nhsValues.length > 0 ? (
+                              analysis.nhsValues.map((value, index) => (
+                                <Badge key={index} variant="default" className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                  {value}
+                                </Badge>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No specific NHS values detected in the job description</p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
                     {/* Requirements Comparison Table */}
                     <Card className="border border-muted">
                       <CardHeader className="pb-2">
@@ -312,8 +389,21 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                                     <TableCell className="align-top">
                                       {renderRequirementText(req)}
                                     </TableCell>
-                                    <TableCell className="align-top text-sm text-muted-foreground">
-                                      No matching evidence found in your CV
+                                    <TableCell className="align-top">
+                                      <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">
+                                          No matching evidence found in your CV
+                                        </p>
+                                        <div className="space-y-1">
+                                          <FormLabel className="text-xs">Do you meet this requirement?</FormLabel>
+                                          <Textarea 
+                                            placeholder="Explain how you meet this requirement..."
+                                            value={unmatchedResponses[req] || ''}
+                                            onChange={(e) => handleUnmatchedResponse(req, e.target.value)}
+                                            className="text-sm min-h-[60px]"
+                                          />
+                                        </div>
+                                      </div>
                                     </TableCell>
                                     <TableCell className="align-top">
                                       <div className="flex items-center">
@@ -329,29 +419,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                         ) : (
                           <p className="text-sm text-muted-foreground">No specific requirements detected in the job description</p>
                         )}
-                      </CardContent>
-                    </Card>
-                    
-                    {/* NHS Values Section */}
-                    <Card className="border border-muted">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">NHS Values Identified</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex flex-wrap gap-2">
-                          {analysis.nhsValues.length > 0 ? (
-                            analysis.nhsValues.map((value, index) => (
-                              <Badge key={index} variant="default" className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                                {value}
-                              </Badge>
-                            ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground">No specific NHS values detected in the job description</p>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          These NHS values were identified in the job description and will be emphasized in your statement.
-                        </p>
                       </CardContent>
                     </Card>
                     
