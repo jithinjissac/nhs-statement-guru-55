@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { BookOpen, Briefcase } from 'lucide-react';
-import { CVAnalysisResult } from '@/services/AIService';
+import { CVAnalysisResult } from '@/services/ai/types';
 
 interface CVSummaryProps {
   analysis: CVAnalysisResult;

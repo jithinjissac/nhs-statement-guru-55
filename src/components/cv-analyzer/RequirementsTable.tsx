@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -7,7 +6,7 @@ import { FormLabel } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, AlertCircle } from 'lucide-react';
-import { CVAnalysisResult } from '@/services/AIService';
+import { CVAnalysisResult } from '@/services/ai/types';
 
 interface RequirementsTableProps {
   analysis: CVAnalysisResult;

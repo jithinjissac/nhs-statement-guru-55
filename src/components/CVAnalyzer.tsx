@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AIService, CVAnalysisResult } from '@/services/AIService';
+import { AIService, CVAnalysisResult } from '@/services/ai';
 import { toast } from 'sonner';
 
 // Import refactored components
@@ -30,7 +29,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
 
-  // Analyze CV automatically when component loads if CV and job description are available
   useEffect(() => {
     if (cv && jobDescription && !analysis) {
       analyzeCV();
@@ -54,7 +52,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     
     try {
       console.log("Starting CV analysis");
-      // Combine all additional information
       const combinedAdditionalInfo = [
         additionalExperience && `Additional Experience: ${additionalExperience}`,
         additionalQualifications && `Additional Qualifications: ${additionalQualifications}`,
@@ -98,7 +95,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     setProgressStatus('Starting statement generation...');
     
     try {
-      // Combine all additional information including unmatched responses
       const additionalInfo = [
         additionalExperience && `Additional Experience: ${additionalExperience}`,
         additionalQualifications && `Additional Qualifications: ${additionalQualifications}`,
@@ -143,12 +139,10 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         </CardHeader>
         <CardContent>
           <div className="space-y-8">
-            {/* Progress Bar - Always show when analyzing or generating */}
             {(isAnalyzing || isGenerating) && (
               <ProgressIndicator status={progressStatus} progress={progress} />
             )}
             
-            {/* Additional Information Inputs */}
             <AdditionalInformation 
               additionalExperience={additionalExperience}
               setAdditionalExperience={setAdditionalExperience}
@@ -160,7 +154,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               isAnalyzing={isAnalyzing}
             />
             
-            {/* Analysis in Progress */}
             {isAnalyzing && !analysis && (
               <LoadingSpinner 
                 message="Analyzing your CV against job requirements..." 
@@ -168,7 +161,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               />
             )}
             
-            {/* Step 1: CV & JD Analysis with Comparison Table */}
             {!isAnalyzing && analysis && activeStep === 2 && (
               <AnalysisStep 
                 analysis={analysis}
@@ -179,7 +171,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               />
             )}
             
-            {/* Generation in Progress */}
             {isGenerating && !tailoredStatement && (
               <LoadingSpinner 
                 message="Generating your tailored statement..." 
@@ -187,7 +178,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               />
             )}
             
-            {/* Step 2: Generated Statement */}
             {tailoredStatement && activeStep === 3 && (
               <TailoredStatement 
                 statement={tailoredStatement}

@@ -2,7 +2,7 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ArrowRight } from 'lucide-react';
-import { CVAnalysisResult } from '@/services/AIService';
+import { CVAnalysisResult } from '@/services/ai/types';
 
 interface RecommendationsProps {
   analysis: CVAnalysisResult;

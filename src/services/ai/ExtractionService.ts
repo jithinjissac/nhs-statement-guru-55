@@ -1,121 +1,11 @@
-export type AIModelConfig = {
-  id: string;
-  name: string;
-  provider: string;
-  endpoint: string;
-  maxTokens: number;
-  temperature: number;
-  enabled: boolean;
-};
-
-export type CVAnalysisResult = {
-  relevantSkills: string[];
-  relevantExperience: {
-    clinical: string[];
-    nonClinical: string[];
-    administrative: string[];
-    yearsOfExperience: number;
-  };
-  matchedRequirements: {requirement: string, evidence: string, keywords: string[]}[];
-  missingRequirements: string[];
-  recommendedHighlights: string[];
-  nhsValues: string[];
-  education: string[];
-};
-
-export class AIService {
-  private static models: AIModelConfig[] = [
-    {
-      id: 'claude-3-sonnet',
-      name: 'Claude 3 Sonnet',
-      provider: 'Anthropic',
-      endpoint: 'https://api.anthropic.com/v1/messages',
-      maxTokens: 4096,
-      temperature: 0.7,
-      enabled: true
-    },
-    {
-      id: 'gpt-3.5-turbo',
-      name: 'GPT-3.5 Turbo',
-      provider: 'OpenAI',
-      endpoint: 'https://api.openai.com/v1/chat/completions',
-      maxTokens: 2048,
-      temperature: 0.7,
-      enabled: true
-    },
-    {
-      id: 'mixtral-8x7b',
-      name: 'Mixtral 8x7B',
-      provider: 'Mistral AI',
-      endpoint: 'https://api.mistral.ai/v1/chat/completions',
-      maxTokens: 4096,
-      temperature: 0.7,
-      enabled: true
-    }
-  ];
-  
-  private static apiKeys: Record<string, string> = {};
-  
-  static setApiKey(provider: string, key: string): void {
-    this.apiKeys[provider.toLowerCase()] = key;
-  }
-  
-  static getApiKey(provider: string): string | null {
-    return this.apiKeys[provider.toLowerCase()] || null;
-  }
-  
-  static getModels(): AIModelConfig[] {
-    return this.models;
-  }
-  
-  static setModelEnabled(modelId: string, enabled: boolean): void {
-    const model = this.models.find(m => m.id === modelId);
-    if (model) {
-      model.enabled = enabled;
-    }
-  }
-  
-  /**
-   * Call to Anthropic API for CV analysis
-   */
-  private static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
-    try {
-      const apiKey = this.getApiKey('anthropic');
-      
-      if (!apiKey) {
-        throw new Error('Anthropic API key not set. Please set it in the Settings page.');
-      }
-      
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-sonnet-20240229',
-          max_tokens: maxTokens,
-          messages: messages
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Anthropic API error: ${errorData.error?.message || response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Error calling Anthropic API:', error);
-      throw error;
-    }
-  }
-  
+/**
+ * Service responsible for extracting information from CVs and job descriptions
+ */
+export class ExtractionService {
   /**
    * Extracts NHS values mentioned in the job description
    */
-  private static extractNHSValues(jobDescription: string): string[] {
+  static extractNHSValues(jobDescription: string): string[] {
     const commonNHSValues = [
       'respect and dignity',
       'commitment to quality of care',
@@ -157,7 +47,7 @@ export class AIService {
   /**
    * Extracts skills from CV text using AI-based identification
    */
-  private static extractSkills(cvText: string): string[] {
+  static extractSkills(cvText: string): string[] {
     const extractedSkills: Set<string> = new Set();
     const sentences = cvText.split(/[.!?]+/);
     
@@ -231,7 +121,7 @@ export class AIService {
   /**
    * Extracts education qualifications from CV
    */
-  private static extractEducation(cvText: string): string[] {
+  static extractEducation(cvText: string): string[] {
     const education: string[] = [];
     const lines = cvText.split('\n');
     let inEducationSection = false;
@@ -311,7 +201,7 @@ export class AIService {
   /**
    * Extracts requirements from job description, focusing on Person Specification tables
    */
-  private static extractRequirements(jobDescription: string): string[] {
+  static extractRequirements(jobDescription: string): string[] {
     const lines = jobDescription.split('\n');
     const requirements: string[] = [];
     
@@ -407,7 +297,7 @@ export class AIService {
   /**
    * Calculates years of experience from date ranges in CV text
    */
-  private static calculateYearsOfExperience(cvText: string): number {
+  static calculateYearsOfExperience(cvText: string): number {
     let totalYears = 0;
     const dateRanges = [];
     
@@ -467,7 +357,7 @@ export class AIService {
   /**
    * Extracts experience from CV with improved identification of clinical, non-clinical, and administrative roles
    */
-  private static extractExperience(cvText: string): {clinical: string[], nonClinical: string[], administrative: string[], yearsOfExperience: number} {
+  static extractExperience(cvText: string): {clinical: string[], nonClinical: string[], administrative: string[], yearsOfExperience: number} {
     const clinical: string[] = [];
     const nonClinical: string[] = [];
     const administrative: string[] = [];
@@ -635,224 +525,4 @@ export class AIService {
       yearsOfExperience
     };
   }
-  
-  /**
-   * Matches requirements against CV content with improved evidence extraction
-   */
-  private static matchRequirements(
-    requirements: string[],
-    cv: string,
-    additionalExperience: string
-  ): { 
-    matchedRequirements: {requirement: string, evidence: string, keywords: string[]}[],
-    missingRequirements: string[]
-  } {
-    const fullCV = additionalExperience ? `${cv}\n\nAdditional Experience:\n${additionalExperience}` : cv;
-    const matchedRequirements: {requirement: string, evidence: string, keywords: string[]}[] = [];
-    const missingRequirements: string[] = [];
-    
-    for (const req of requirements) {
-      // Extract the actual requirement text without the [Essential]/[Desirable] prefix
-      const reqTextOnly = req.replace(/^\[(Essential|Desirable)\]\s+/, '');
-      const reqLower = reqTextOnly.toLowerCase();
-      const fullCVLower = fullCV.toLowerCase();
-      
-      // Break the requirement into significant words (more than 3 chars)
-      const reqWords = reqLower.split(/\s+/).filter(word => word.length > 3);
-      const matchedWords: string[] = [];
-      
-      // Skip common words
-      const commonWords = ['with', 'this', 'that', 'have', 'from', 'were', 'what', 'when', 'where', 'which', 'their', 'there', 'these', 'those', 'will', 'should', 'could', 'would', 'able'];
-      const filteredReqWords = reqWords.filter(word => !commonWords.includes(word));
-      
-      // Check for keyword matches
-      for (const reqWord of filteredReqWords) {
-        if (fullCVLower.includes(reqWord)) {
-          matchedWords.push(reqWord);
-        }
-      }
-      
-      // Consider it a match if at least 2 significant words match
-      if (matchedWords.length >= 2) {
-        // Find a relevant sentence from CV as evidence
-        const sentences = fullCV.match(/[^.!?]+[.!?]+/g) || [];
-        let bestEvidence = '';
-        let bestMatchCount = 0;
-        
-        for (const sentence of sentences) {
-          const sentenceLower = sentence.toLowerCase();
-          let sentenceMatchCount = 0;
-          
-          for (const word of matchedWords) {
-            if (sentenceLower.includes(word)) {
-              sentenceMatchCount++;
-            }
-          }
-          
-          if (sentenceMatchCount > bestMatchCount) {
-            bestMatchCount = sentenceMatchCount;
-            bestEvidence = sentence.trim();
-            
-            // If we found a sentence with most of the keywords, stop searching
-            if (sentenceMatchCount >= matchedWords.length * 0.7) {
-              break;
-            }
-          }
-        }
-        
-        // Simplify and shorten the evidence
-        if (bestEvidence) {
-          if (bestEvidence.length > 100) {
-            bestEvidence = bestEvidence.substring(0, 97) + '...';
-          }
-        } else {
-          // Fallback if no sentence found
-          bestEvidence = `Matches keywords: ${matchedWords.join(', ')}`;
-        }
-        
-        matchedRequirements.push({
-          requirement: req,
-          evidence: bestEvidence,
-          keywords: matchedWords
-        });
-      } else {
-        missingRequirements.push(req);
-      }
-    }
-    
-    return { matchedRequirements, missingRequirements };
-  }
-  
-  /**
-   * Generate recommended highlights for the statement
-   */
-  private static generateRecommendedHighlights(
-    matchedRequirements: string[],
-    nhsValues: string[],
-    experience: {clinical: string[], nonClinical: string[], administrative: string[], yearsOfExperience: number}
-  ): string[] {
-    const highlights: string[] = [];
-    
-    // Highlight NHS values alignment
-    if (nhsValues.length > 0) {
-      highlights.push(`Show how you fit with NHS values like ${nhsValues.slice(0, 2).join(', ')}`);
-    }
-    
-    // Highlight key matched requirements
-    for (let i = 0; i < Math.min(2, matchedRequirements.length); i++) {
-      highlights.push(`Give examples of your ${matchedRequirements[i].replace(/^\[(Essential|Desirable)\]\s+/, '')}`);
-    }
-    
-    // Highlight relevant experience
-    if (experience.clinical.length > 0) {
-      highlights.push('Mention your clinical achievements with numbers if you can');
-    }
-    
-    if (experience.nonClinical.length > 0) {
-      highlights.push('Explain how your non-clinical experience helps in this job');
-    }
-    
-    if (experience.administrative.length > 0) {
-      highlights.push('Show how your admin skills help deliver healthcare');
-    }
-    
-    // Add general best practices
-    highlights.push('Include times when you solved problems well');
-    
-    return highlights;
-  }
-  
-  /**
-   * Analyzes CV against job requirements with improved matching and progress tracking
-   */
-  static async analyzeCV(
-    cv: string,
-    jobDescription: string,
-    additionalExperience: string = '',
-    progressCallback?: (stage: string, percent: number) => void
-  ): Promise<CVAnalysisResult> {
-    console.log("Analyzing CV with text length:", cv.length);
-    console.log("Analyzing job description with text length:", jobDescription.length);
-    
-    // Update progress
-    progressCallback?.('Initializing analysis', 5);
-    
-    try {
-      // Prepare the prompt for Anthropic
-      progressCallback?.('Preparing CV analysis', 15);
-      
-      const messages = [
-        {
-          role: "user",
-          content: `I need you to analyze a CV against a job description to help prepare a supporting statement. Here's the CV:
-
-${cv}
-
-Here's the job description:
-
-${jobDescription}
-
-${additionalExperience ? `Additional context provided by the applicant:
-${additionalExperience}` : ''}
-
-Please analyze the CV against the job description and provide a structured JSON response with the following information:
-1. Relevant skills found in the CV (list of strings)
-2. Relevant experience categorized as: clinical, non-clinical, and administrative (lists of strings), along with estimated years of experience
-3. Job requirements from the description that match content in the CV, with specific evidence from the CV
-4. Job requirements from the description that are not evidenced in the CV
-5. Recommended highlights to focus on in a supporting statement
-6. NHS values mentioned in the job description
-7. Education qualifications from the CV
-
-Return the response as a valid JSON object with the following structure:
-{
-  "relevantSkills": ["skill1", "skill2", ...],
-  "relevantExperience": {
-    "clinical": ["experience1", "experience2", ...],
-    "nonClinical": ["experience1", "experience2", ...],
-    "administrative": ["experience1", "experience2", ...],
-    "yearsOfExperience": number
-  },
-  "matchedRequirements": [
-    {"requirement": "text", "evidence": "text", "keywords": ["keyword1", "keyword2"]}
-  ],
-  "missingRequirements": ["requirement1", "requirement2", ...],
-  "recommendedHighlights": ["highlight1", "highlight2", ...],
-  "nhsValues": ["value1", "value2", ...],
-  "education": ["qualification1", "qualification2", ...]
-}`
-        }
-      ];
-      
-      progressCallback?.('Sending to AI service', 30);
-      const response = await this.callAnthropic(messages, 4000);
-      progressCallback?.('Processing AI response', 70);
-      
-      // Extract and parse the JSON from the response
-      const content = response.content[0].text;
-      
-      // Find the JSON in the content (may be wrapped in ```json or just plain JSON)
-      let jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/{[\s\S]*?}/);
-      let jsonString = jsonMatch ? jsonMatch[0] : content;
-      
-      // Clean up the string to ensure it's valid JSON
-      jsonString = jsonString.replace(/```json|```/g, '').trim();
-      
-      // Parse the JSON response
-      const analysis: CVAnalysisResult = JSON.parse(jsonString);
-      
-      // Complete the progress
-      progressCallback?.('Analysis complete', 100);
-      
-      return analysis;
-    } catch (error) {
-      console.error('Error in CV analysis:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Generates a tailored supporting statement based on CV and job description
-   */
-  static async generateTailoredStatement(
-    cv: string,
+}

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CVAnalysisResult } from '@/services/AIService';
+import { CVAnalysisResult } from '@/services/ai/types';
 import CVSummary from './CVSummary';
 import JobSummary from './JobSummary';
 import RequirementsTable from './RequirementsTable';
