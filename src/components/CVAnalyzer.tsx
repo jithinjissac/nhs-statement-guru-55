@@ -3,9 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, ArrowRight, Loader2, Users } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AIService, CVAnalysisResult } from '@/services/AIService';
 import { toast } from 'sonner';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -21,7 +20,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [isGenerating, setIsGenerating] = useState(false);
   const [analysis, setAnalysis] = useState<CVAnalysisResult | null>(null);
   const [tailoredStatement, setTailoredStatement] = useState('');
-  const [writingStyle, setWritingStyle] = useState<'simple' | 'moderate' | 'advanced'>('moderate');
+  const [additionalExperience, setAdditionalExperience] = useState('');
   const [activeStep, setActiveStep] = useState(1);
 
   // Analyze CV automatically when component loads if CV and job description are available
@@ -40,7 +39,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     setIsAnalyzing(true);
     try {
       console.log("Starting CV analysis");
-      const result = await AIService.analyzeCV(cv, jobDescription);
+      const result = await AIService.analyzeCV(cv, jobDescription, additionalExperience);
       console.log("Analysis result:", result);
       setAnalysis(result);
       setActiveStep(2);
@@ -64,8 +63,8 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       const result = await AIService.generateTailoredStatement(
         cv,
         jobDescription,
-        '', // No additional experiences needed as we're using extracted data
-        writingStyle
+        additionalExperience,
+        'simple' // Fixed to simple style (GCSE level)
       );
       
       setTailoredStatement(result.statement);
@@ -95,6 +94,40 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         </CardHeader>
         <CardContent>
           <div className="space-y-8">
+            {/* Additional Experience Input */}
+            <Card className="border border-muted">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Additional Experience</CardTitle>
+                <CardDescription>
+                  Add any relevant experience not mentioned in your CV
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  placeholder="Describe any additional experiences relevant to this job that may not be in your CV..."
+                  value={additionalExperience}
+                  onChange={(e) => setAdditionalExperience(e.target.value)}
+                  className="min-h-[120px]"
+                />
+                <div className="flex justify-end mt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={analyzeCV} 
+                    disabled={isAnalyzing}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Updating Analysis...
+                      </>
+                    ) : (
+                      <>Update Analysis</>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            
             {/* Analysis in Progress */}
             {isAnalyzing && (
               <div className="flex flex-col items-center justify-center py-12">
@@ -118,6 +151,11 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                     <Card className="border border-muted">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base">CV Summary</CardTitle>
+                        {analysis.relevantExperience.yearsOfExperience > 0 && (
+                          <CardDescription>
+                            {analysis.relevantExperience.yearsOfExperience} {analysis.relevantExperience.yearsOfExperience === 1 ? 'year' : 'years'} of experience identified
+                          </CardDescription>
+                        )}
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -149,7 +187,20 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                         </div>
 
                         <div className="space-y-2">
-                          <h5 className="text-sm font-medium">Non-Clinical Experience</h5>
+                          <h5 className="text-sm font-medium">Administrative Experience</h5>
+                          {analysis.relevantExperience.administrative?.length > 0 ? (
+                            <ul className="text-sm space-y-1 list-disc pl-5">
+                              {analysis.relevantExperience.administrative.map((exp, index) => (
+                                <li key={index}>{exp}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No administrative experience detected in your CV</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <h5 className="text-sm font-medium">Other Non-Clinical Experience</h5>
                           {analysis.relevantExperience.nonClinical.length > 0 ? (
                             <ul className="text-sm space-y-1 list-disc pl-5">
                               {analysis.relevantExperience.nonClinical.map((exp, index) => (
@@ -157,7 +208,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                               ))}
                             </ul>
                           ) : (
-                            <p className="text-sm text-muted-foreground">No non-clinical experience detected in your CV</p>
+                            <p className="text-sm text-muted-foreground">No other non-clinical experience detected in your CV</p>
                           )}
                         </div>
                       </CardContent>
@@ -167,32 +218,46 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                     <Card className="border border-muted">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-base">Requirements Comparison</CardTitle>
+                        <CardDescription>
+                          Based on Person Specification from job description
+                        </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        {analysis.matchedRequirements.length > 0 || analysis.missingRequirements.length > 0 ? (
+                        {(analysis.matchedRequirements.length > 0 || analysis.missingRequirements.length > 0) ? (
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>Requirement</TableHead>
-                                <TableHead>Status</TableHead>
+                                <TableHead className="w-1/2">Requirement</TableHead>
+                                <TableHead className="w-1/3">Evidence</TableHead>
+                                <TableHead className="w-1/6">Status</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {analysis.matchedRequirements.map((req, index) => (
                                 <TableRow key={`matched-${index}`}>
-                                  <TableCell>{req}</TableCell>
-                                  <TableCell className="flex items-center">
-                                    <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                                    <span className="text-green-600 dark:text-green-400">Matched</span>
+                                  <TableCell className="align-top">{req.requirement}</TableCell>
+                                  <TableCell className="align-top text-sm">
+                                    {req.evidence}
+                                  </TableCell>
+                                  <TableCell className="align-top">
+                                    <div className="flex items-center">
+                                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                                      <span className="text-green-600 dark:text-green-400">Matched</span>
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               ))}
                               {analysis.missingRequirements.map((req, index) => (
                                 <TableRow key={`missing-${index}`}>
-                                  <TableCell>{req}</TableCell>
-                                  <TableCell className="flex items-center">
-                                    <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
-                                    <span className="text-amber-600 dark:text-amber-400">Missing</span>
+                                  <TableCell className="align-top">{req}</TableCell>
+                                  <TableCell className="align-top text-sm text-muted-foreground">
+                                    No matching evidence found
+                                  </TableCell>
+                                  <TableCell className="align-top">
+                                    <div className="flex items-center">
+                                      <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
+                                      <span className="text-amber-600 dark:text-amber-400">Missing</span>
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -245,31 +310,6 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                         ) : (
                           <p className="text-sm text-muted-foreground">No specific recommendations available</p>
                         )}
-                      </CardContent>
-                    </Card>
-                    
-                    {/* Writing Style Selection */}
-                    <Card className="border border-muted">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Writing Style</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <Select 
-                          value={writingStyle}
-                          onValueChange={(value: any) => setWritingStyle(value)}
-                        >
-                          <SelectTrigger id="writing-style">
-                            <SelectValue placeholder="Select writing style" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="simple">Simple (GCSE Level)</SelectItem>
-                            <SelectItem value="moderate">Moderate (A-Level)</SelectItem>
-                            <SelectItem value="advanced">Advanced (University Level)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Select a writing style for your supporting statement. Simple writing styles may appear more human-written.
-                        </p>
                       </CardContent>
                     </Card>
                     
