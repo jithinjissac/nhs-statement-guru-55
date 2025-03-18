@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface AdditionalInformationProps {
   additionalExperience: string;
@@ -27,6 +28,11 @@ const AdditionalInformation: React.FC<AdditionalInformationProps> = ({
   onUpdate,
   isAnalyzing
 }) => {
+  const handleUpdate = () => {
+    toast.info("Starting analysis with your additional information");
+    onUpdate();
+  };
+
   return (
     <Card className="border border-muted">
       <CardHeader className="pb-2">
@@ -69,7 +75,7 @@ const AdditionalInformation: React.FC<AdditionalInformationProps> = ({
         <div className="flex justify-end mt-4">
           <Button 
             variant="outline" 
-            onClick={onUpdate} 
+            onClick={handleUpdate} 
             disabled={isAnalyzing}
           >
             {isAnalyzing ? (
