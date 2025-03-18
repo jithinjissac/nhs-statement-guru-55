@@ -27,9 +27,10 @@ export class StorageService {
         guideline.id = uuidv4();
       }
       
+      // Passing an array of objects for upsert as required by TypeScript
       const { error } = await supabase
         .from('rules')
-        .upsert({
+        .upsert([{
           id: guideline.id,
           title: guideline.title,
           content: guideline.content,
@@ -39,7 +40,7 @@ export class StorageService {
           created_by: guideline.id, // This is a workaround as we don't have auth yet
           file_name: null,
           file_url: null
-        });
+        }]);
       
       if (error) throw error;
     } catch (error) {
@@ -98,10 +99,10 @@ export class StorageService {
         sample.id = uuidv4();
       }
       
-      // We need to create a new object that matches the table schema
+      // Passing an array of objects for upsert as required by TypeScript
       const { error } = await supabase
         .from('sample_statements')
-        .upsert({
+        .upsert([{
           id: sample.id,
           title: sample.title,
           content: sample.content,
@@ -109,7 +110,7 @@ export class StorageService {
           created_at: sample.dateAdded ? new Date(sample.dateAdded) : new Date(),
           updated_at: new Date(),
           created_by: sample.id // This is a workaround as we don't have auth yet
-        });
+        }]);
       
       if (error) throw error;
     } catch (error) {
