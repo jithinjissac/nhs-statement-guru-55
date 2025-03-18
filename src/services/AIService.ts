@@ -1,3 +1,4 @@
+
 export type AIModelConfig = {
   id: string;
   name: string;
@@ -128,7 +129,7 @@ export class AIService {
         'Emphasize your clinical decision-making experience',
         'Highlight your patient-centered approach',
         'Mention specific examples of multidisciplinary collaboration',
-        'Quantify improvements you've achieved in previous roles'
+        'Quantify improvements you\'ve achieved in previous roles'
       ]
     };
   }
