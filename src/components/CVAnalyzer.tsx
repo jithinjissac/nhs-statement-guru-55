@@ -1,17 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AIService, CVAnalysisResult } from '@/services/ai';
 import { toast } from 'sonner';
-
-// Import refactored components
 import AdditionalInformation from './cv-analyzer/AdditionalInformation';
 import ProgressIndicator from './cv-analyzer/ProgressIndicator';
 import LoadingSpinner from './cv-analyzer/LoadingSpinner';
 import AnalysisStep from './cv-analyzer/AnalysisStep';
 import TailoredStatement from './cv-analyzer/TailoredStatement';
 import { Button } from './ui/button';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface CVAnalyzerProps {
   cv: string;
@@ -20,6 +18,7 @@ interface CVAnalyzerProps {
 }
 
 const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatementGenerated }) => {
+  const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [analysis, setAnalysis] = useState<CVAnalysisResult | null>(null);
@@ -138,7 +137,10 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     }
   };
 
-  // Render error state with retry button
+  const navigateToSettings = () => {
+    navigate('/settings');
+  };
+
   const renderError = () => (
     <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
       <div className="flex flex-col items-center gap-3">
@@ -146,11 +148,21 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         <h3 className="text-lg font-medium text-red-800">Analysis Failed</h3>
         <p className="text-red-600 mb-4">{error}</p>
         <p className="text-sm text-gray-600 mb-4">
-          {error?.includes('API key') 
-            ? "Please set your Anthropic API key in the Settings page or try again later." 
+          {error?.includes('API key') || error?.includes('network') || error?.includes('fetch')
+            ? "Please check your Anthropic API key in the Settings page or check your internet connection." 
             : "There was a problem analyzing your CV. Please try again."}
         </p>
-        <Button onClick={analyzeCV}>Try Again</Button>
+        <div className="flex gap-3">
+          <Button onClick={analyzeCV} variant="default">
+            Try Again
+          </Button>
+          {(error?.includes('API key') || error?.includes('network') || error?.includes('fetch')) && (
+            <Button onClick={navigateToSettings} variant="outline">
+              <Settings className="h-4 w-4 mr-2" />
+              Go to Settings
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

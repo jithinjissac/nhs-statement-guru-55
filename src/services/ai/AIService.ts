@@ -1,4 +1,3 @@
-
 import { AIModelConfig } from './types';
 import { AnalysisService } from './AnalysisService';
 import { ExtractionService } from './ExtractionService';
@@ -39,21 +38,33 @@ export class AIService {
   
   static async initializeApiKeys(): Promise<void> {
     try {
+      console.log('Initializing API keys...');
       this.apiKeys = await StorageService.getApiKeys();
+      console.log('API keys initialized successfully:', Object.keys(this.apiKeys).length > 0 ? Object.keys(this.apiKeys) : 'No keys found');
     } catch (error) {
       console.error('Failed to initialize API keys:', error);
     }
   }
   
   static setApiKey(provider: string, key: string): void {
+    if (!key || !key.trim()) {
+      console.warn('Attempted to set empty API key for provider:', provider);
+      return;
+    }
+    
     this.apiKeys[provider.toLowerCase()] = key;
+    console.log(`Setting API key for ${provider}`);
+    
     // Save to storage
     StorageService.saveApiKey(provider.toLowerCase(), key)
       .catch(error => console.error('Error saving API key:', error));
   }
   
   static getApiKey(provider: string): string | null {
-    return this.apiKeys[provider.toLowerCase()] || null;
+    const key = this.apiKeys[provider.toLowerCase()];
+    // Log whether we found a key (but don't log the actual key)
+    console.log(`${provider} API key ${key ? 'found' : 'not found'}`);
+    return key || null;
   }
   
   static getModels(): AIModelConfig[] {
@@ -71,8 +82,16 @@ export class AIService {
   static async analyzeCV(...args: Parameters<typeof AnalysisService.analyzeCV>) {
     // Make sure API keys are loaded
     if (Object.keys(this.apiKeys).length === 0) {
+      console.log('No API keys found, initializing before analysis...');
       await this.initializeApiKeys();
     }
+    
+    // After initialization, check if we have the Anthropic key
+    const anthropicKey = this.getApiKey('anthropic');
+    if (!anthropicKey) {
+      console.warn('No Anthropic API key found after initialization');
+    }
+    
     return AnalysisService.analyzeCV(...args);
   }
   
