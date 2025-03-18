@@ -1,13 +1,36 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useDropzone } from 'react-dropzone';
-import { FileUp, FileText, Upload, Trash2, Download, Check, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
+import { FileUp, FileText, Upload, Trash2, Download, Check, ChevronRight, RefreshCw, Loader2, HelpCircle, Book } from 'lucide-react';
 import { FileProcessingService, ProcessedFile } from '@/services/FileProcessingService';
 import { toast } from 'sonner';
 import CVAnalyzer from '@/components/CVAnalyzer';
+import { StorageService, Guideline, SampleStatement } from '@/services/StorageService';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type ProcessingStatus = 'idle' | 'processing' | 'complete' | 'error';
 
@@ -18,6 +41,47 @@ const CreateStatement: React.FC = () => {
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>('idle');
   const [generatedStatement, setGeneratedStatement] = useState<string>('');
   const [activeStep, setActiveStep] = useState(1);
+  
+  // State for guidelines and samples
+  const [guidelines, setGuidelines] = useState<Guideline[]>([]);
+  const [sampleStatements, setSampleStatements] = useState<SampleStatement[]>([]);
+  const [isGuidelinesOpen, setIsGuidelinesOpen] = useState(false);
+  const [selectedGuideline, setSelectedGuideline] = useState<Guideline | null>(null);
+  const [isSamplesOpen, setIsSamplesOpen] = useState(false);
+  const [selectedSample, setSelectedSample] = useState<SampleStatement | null>(null);
+  const [isLoadingGuidelines, setIsLoadingGuidelines] = useState(false);
+  const [isLoadingSamples, setIsLoadingSamples] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Fetch guidelines and sample statements
+  useEffect(() => {
+    fetchGuidelines();
+    fetchSampleStatements();
+  }, []);
+  
+  const fetchGuidelines = async () => {
+    setIsLoadingGuidelines(true);
+    try {
+      const data = await StorageService.getGuidelines();
+      setGuidelines(data);
+    } catch (error) {
+      console.error('Failed to fetch guidelines:', error);
+    } finally {
+      setIsLoadingGuidelines(false);
+    }
+  };
+  
+  const fetchSampleStatements = async () => {
+    setIsLoadingSamples(true);
+    try {
+      const data = await StorageService.getSampleStatements();
+      setSampleStatements(data);
+    } catch (error) {
+      console.error('Failed to fetch sample statements:', error);
+    } finally {
+      setIsLoadingSamples(false);
+    }
+  };
 
   // CV dropzone
   const onDropCV = useCallback(async (acceptedFiles: File[]) => {
@@ -133,6 +197,26 @@ const CreateStatement: React.FC = () => {
     
     toast.success('Statement downloaded successfully');
   };
+  
+  // Handle guideline preview
+  const handleGuidelinePreview = (guideline: Guideline) => {
+    setSelectedGuideline(guideline);
+    setIsGuidelinesOpen(true);
+  };
+  
+  // Handle sample statement preview
+  const handleSamplePreview = (sample: SampleStatement) => {
+    setSelectedSample(sample);
+    setIsSamplesOpen(true);
+  };
+  
+  // Get unique categories for sample statements filter
+  const categories = [...new Set(sampleStatements.map(sample => sample.category))];
+  
+  // Filter sample statements by category
+  const filteredSamples = selectedCategory
+    ? sampleStatements.filter(sample => sample.category === selectedCategory)
+    : sampleStatements;
   
   // Step content rendering based on active step
   const renderStepContent = () => {
@@ -258,6 +342,123 @@ const CreateStatement: React.FC = () => {
                   )}
                 </CardContent>
               </Card>
+            </div>
+            
+            {/* Resources Section */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold">Resources</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Guidelines */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <HelpCircle className="h-5 w-5 text-blue-600" />
+                      NHS Statement Guidelines
+                    </CardTitle>
+                    <CardDescription>
+                      Tips and guidance for creating effective NHS supporting statements
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingGuidelines ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : guidelines.length > 0 ? (
+                      <Accordion type="single" collapsible>
+                        {guidelines.slice(0, 3).map((guideline) => (
+                          <AccordionItem key={guideline.id} value={guideline.id}>
+                            <AccordionTrigger>{guideline.title}</AccordionTrigger>
+                            <AccordionContent>
+                              <p className="line-clamp-3 text-muted-foreground mb-2">
+                                {guideline.content.substring(0, 150)}...
+                              </p>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleGuidelinePreview(guideline)}
+                              >
+                                Read More
+                              </Button>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-4">
+                        No guidelines available
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                {/* Sample Statements */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Book className="h-5 w-5 text-blue-600" />
+                      Sample Statements
+                    </CardTitle>
+                    <CardDescription>
+                      Example statements to inspire your NHS application
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingSamples ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : sampleStatements.length > 0 ? (
+                      <div className="space-y-4">
+                        <Select
+                          value={selectedCategory || ''}
+                          onValueChange={(value) => setSelectedCategory(value || null)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="All Categories" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All Categories</SelectItem>
+                            {categories.map(category => (
+                              <SelectItem key={category} value={category}>
+                                {category.charAt(0).toUpperCase() + category.slice(1)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        
+                        <div className="space-y-3">
+                          {filteredSamples.slice(0, 3).map((sample) => (
+                            <div key={sample.id} className="p-3 border rounded-md">
+                              <div className="flex justify-between mb-2">
+                                <h4 className="font-medium">{sample.title}</h4>
+                                <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 rounded-full">
+                                  {sample.category.charAt(0).toUpperCase() + sample.category.slice(1)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                                {sample.content.substring(0, 120)}...
+                              </p>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleSamplePreview(sample)}
+                              >
+                                View Sample
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-4">
+                        No sample statements available
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
             
             {/* Next Button - Only if both documents are uploaded */}
@@ -396,6 +597,42 @@ const CreateStatement: React.FC = () => {
       
       {/* Step Content */}
       {renderStepContent()}
+      
+      {/* Guideline Preview Dialog */}
+      <Dialog open={isGuidelinesOpen} onOpenChange={setIsGuidelinesOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedGuideline?.title || 'Guideline'}</DialogTitle>
+            <DialogDescription>
+              NHS supporting statement guideline
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[60vh]">
+            <div className="p-4 whitespace-pre-wrap">
+              {selectedGuideline?.content || ''}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Sample Statement Preview Dialog */}
+      <Dialog open={isSamplesOpen} onOpenChange={setIsSamplesOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedSample?.title || 'Sample Statement'}</DialogTitle>
+            <DialogDescription>
+              Category: {selectedSample?.category ? (selectedSample.category.charAt(0).toUpperCase() + selectedSample.category.slice(1)) : 'General'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[60vh]">
+            <div className="p-4 whitespace-pre-wrap">
+              {selectedSample?.content || ''}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
