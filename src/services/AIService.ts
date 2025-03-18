@@ -80,19 +80,12 @@ export class AIService {
    */
   private static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
     try {
-      // We'll use a fixed API key for now
-      // In a production app, this should be securely obtained
-      const apiKey = "MISSING_API_KEY"; // This is a placeholder
-
-      if (!apiKey || apiKey === "MISSING_API_KEY") {
-        throw new Error("Anthropic API key is not set. Please configure the API key in your Supabase Edge Functions secrets.");
-      }
-
+      // We're using the stored secret ANTHROPIC_API_KEY from Supabase
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
+          'x-api-key': 'ANTHROPIC_API_KEY', // This will be replaced by Supabase with the actual secret
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
@@ -780,71 +773,73 @@ export class AIService {
     progressCallback?.('Initializing analysis', 5);
     
     try {
-      // Return mock data instead of making a real API call
-      // This is a temporary solution until we can properly set up the API key
-      progressCallback?.('Generating mock analysis', 50);
+      // Prepare the prompt for Anthropic
+      progressCallback?.('Preparing CV analysis', 15);
       
-      // Wait a bit to simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const messages = [
+        {
+          role: "user",
+          content: `I need you to analyze a CV against a job description to help prepare a supporting statement. Here's the CV:
+
+${cv}
+
+Here's the job description:
+
+${jobDescription}
+
+${additionalExperience ? `Additional context provided by the applicant:
+${additionalExperience}` : ''}
+
+Please analyze the CV against the job description and provide a structured JSON response with the following information:
+1. Relevant skills found in the CV (list of strings)
+2. Relevant experience categorized as: clinical, non-clinical, and administrative (lists of strings), along with estimated years of experience
+3. Job requirements from the description that match content in the CV, with specific evidence from the CV
+4. Job requirements from the description that are not evidenced in the CV
+5. Recommended highlights to focus on in a supporting statement
+6. NHS values mentioned in the job description
+7. Education qualifications from the CV
+
+Return the response as a valid JSON object with the following structure:
+{
+  "relevantSkills": ["skill1", "skill2", ...],
+  "relevantExperience": {
+    "clinical": ["experience1", "experience2", ...],
+    "nonClinical": ["experience1", "experience2", ...],
+    "administrative": ["experience1", "experience2", ...],
+    "yearsOfExperience": number
+  },
+  "matchedRequirements": [
+    {"requirement": "text", "evidence": "text", "keywords": ["keyword1", "keyword2"]}
+  ],
+  "missingRequirements": ["requirement1", "requirement2", ...],
+  "recommendedHighlights": ["highlight1", "highlight2", ...],
+  "nhsValues": ["value1", "value2", ...],
+  "education": ["qualification1", "qualification2", ...]
+}`
+        }
+      ];
       
-      // Create mock data for demonstration
-      const mockAnalysis: CVAnalysisResult = {
-        relevantSkills: ["Patient Care", "Medical Documentation", "Clinical Assessment", "Team Leadership", "Communication"],
-        relevantExperience: {
-          clinical: ["Staff Nurse - General Hospital (2018-2023)", "Junior Nurse - Community Clinic (2015-2018)"],
-          nonClinical: ["Healthcare Volunteer - Red Cross (2014-2015)"],
-          administrative: ["Ward Administrator - General Hospital (2016-2017)"],
-          yearsOfExperience: 8
-        },
-        matchedRequirements: [
-          {
-            requirement: "[Essential] Registered Nurse with valid NMC registration",
-            evidence: "Registered with the Nursing and Midwifery Council since 2015, PIN: 15I3344E",
-            keywords: ["registered", "nurse", "nmc"]
-          },
-          {
-            requirement: "[Essential] Minimum 3 years of experience in a clinical setting",
-            evidence: "Eight years of clinical nursing experience across hospital and community settings",
-            keywords: ["experience", "clinical", "years"]
-          },
-          {
-            requirement: "[Essential] Strong communication skills",
-            evidence: "Led daily ward rounds and family consultations, regularly presenting patient cases at multidisciplinary team meetings",
-            keywords: ["communication", "skills"]
-          },
-          {
-            requirement: "[Desirable] Experience with electronic patient record systems",
-            evidence: "Proficient in using EPIC, SystmOne, and other electronic patient record systems",
-            keywords: ["electronic", "record", "systems"]
-          }
-        ],
-        missingRequirements: [
-          "[Desirable] Experience in leadership or management roles",
-          "[Desirable] Post-graduate qualification in relevant specialty"
-        ],
-        recommendedHighlights: [
-          "Emphasize your 8 years of clinical experience",
-          "Highlight your communication skills with specific examples",
-          "Mention your adaptability across different healthcare settings",
-          "Include your experience with electronic record systems"
-        ],
-        nhsValues: [
-          "respect and dignity",
-          "commitment to quality of care",
-          "compassion",
-          "improving lives",
-          "working together for patients"
-        ],
-        education: [
-          "BSc Nursing, University of Manchester, 2015",
-          "Advanced Clinical Skills Certificate, Royal College of Nursing, 2019"
-        ]
-      };
+      progressCallback?.('Sending to AI service', 30);
+      const response = await this.callAnthropic(messages, 4000);
+      progressCallback?.('Processing AI response', 70);
+      
+      // Extract and parse the JSON from the response
+      const content = response.content[0].text;
+      
+      // Find the JSON in the content (may be wrapped in ```json or just plain JSON)
+      let jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/{[\s\S]*?}/);
+      let jsonString = jsonMatch ? jsonMatch[0] : content;
+      
+      // Clean up the string to ensure it's valid JSON
+      jsonString = jsonString.replace(/```json|```/g, '').trim();
+      
+      // Parse the JSON response
+      const analysis: CVAnalysisResult = JSON.parse(jsonString);
       
       // Complete the progress
       progressCallback?.('Analysis complete', 100);
       
-      return mockAnalysis;
+      return analysis;
     } catch (error) {
       console.error('Error in CV analysis:', error);
       throw error;
@@ -857,53 +852,4 @@ export class AIService {
   static async generateTailoredStatement(
     cv: string,
     jobDescription: string,
-    additionalInfo: string = '',
-    style: 'simple' | 'professional' | 'comprehensive' = 'professional',
-    progressCallback?: (stage: string, percent: number) => void
-  ): Promise<{ statement: string, analysis: CVAnalysisResult }> {
-    // Update progress
-    progressCallback?.('Starting statement generation', 10);
-    
-    try {
-      // First, analyze the CV to get insights
-      const analysis = await this.analyzeCV(cv, jobDescription, additionalInfo, (stage, percent) => {
-        // Scale progress to first 50%
-        progressCallback?.(stage, Math.floor(percent * 0.5));
-      });
-      
-      progressCallback?.('Creating personalized statement', 60);
-      
-      // Wait a bit to simulate processing time
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Define statement sections based on analysis
-      const values = analysis.nhsValues.slice(0, 3).join(', ');
-      const skills = analysis.relevantSkills.slice(0, 5).join(', ');
-      const experience = analysis.relevantExperience.yearsOfExperience;
-      
-      // Create style variations
-      let statement = '';
-      
-      // We'll use a mock statement for demonstration
-      const mockStatement = `I am a dedicated healthcare professional with ${experience} years of experience in various clinical settings. Throughout my career, I have consistently demonstrated a commitment to ${values}, which aligns perfectly with the NHS values.
-
-My experience as a Staff Nurse at General Hospital has equipped me with strong skills in ${skills}. I have successfully managed complex patient caseloads, maintained accurate clinical documentation, and collaborated effectively with multidisciplinary teams to ensure optimal patient outcomes.
-
-My qualification as a Registered Nurse with the NMC since 2015 (PIN: 15I3344E) meets the essential requirement for this role. My eight years of clinical nursing experience exceeds the minimum three years required, giving me a solid foundation of knowledge and expertise to draw upon.
-
-I am particularly proud of my work in implementing electronic patient record systems, which improved efficiency and reduced documentation errors by 35%. This experience directly relates to the desirable requirement for familiarity with electronic record systems.
-
-During my time at Community Clinic, I developed excellent communication skills through daily patient consultations and family meetings. I believe effective communication is essential in healthcare to ensure patients feel heard and understood, and to facilitate seamless teamwork among colleagues.
-
-I am eager to bring my clinical expertise, administrative knowledge, and patient-centered approach to this role. Thank you for considering my application. I look forward to the opportunity to discuss how my experience and values align with your team's needs.`;
-      
-      // Complete the progress
-      progressCallback?.('Statement generation complete', 100);
-      
-      return { statement: mockStatement, analysis };
-    } catch (error) {
-      console.error('Error generating statement:', error);
-      throw error;
-    }
-  }
-}
+    additional
