@@ -8,7 +8,7 @@ export class AnthropicAPI {
    */
   static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
     try {
-      // First try to get the Anthropic API key from Supabase secret
+      // First try to get the Anthropic API key from storage or environment
       let finalApiKey;
       
       try {
@@ -37,12 +37,15 @@ export class AnthropicAPI {
       }
       
       if (!finalApiKey) {
+        console.error('No API key available for Anthropic');
         throw new Error('Anthropic API key not set. Please set it in the Settings page.');
       }
       
+      console.log("API key available:", finalApiKey ? "Yes" : "No");
+      
       // Add a timeout for the fetch call
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout (increased from 30s)
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout (increased from 60s)
       
       try {
         // Log the start of the API call (for debugging)
@@ -68,10 +71,11 @@ export class AnthropicAPI {
         
         // Check if the response is ok (status in the range 200-299)
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
           const errorMessage = errorData.error?.message || response.statusText;
           console.error('Anthropic API error response:', errorData);
-          throw new Error(`Anthropic API error: ${errorMessage}`);
+          console.error('Status code:', response.status);
+          throw new Error(`Anthropic API error (${response.status}): ${errorMessage}`);
         }
         
         // Parse and return the response JSON
@@ -91,7 +95,7 @@ export class AnthropicAPI {
         // Check for network-related errors
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
           console.error('Network error when calling Anthropic API:', fetchError);
-          throw new Error('Network error when calling Anthropic API. Please check your internet connection or try again later.');
+          throw new Error('Network error when calling Anthropic API. Please check your internet connection and API key.');
         }
         
         // Re-throw the error for other types of errors

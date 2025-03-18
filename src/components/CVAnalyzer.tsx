@@ -8,7 +8,7 @@ import LoadingSpinner from './cv-analyzer/LoadingSpinner';
 import AnalysisStep from './cv-analyzer/AnalysisStep';
 import TailoredStatement from './cv-analyzer/TailoredStatement';
 import { Button } from './ui/button';
-import { AlertTriangle, Settings } from 'lucide-react';
+import { AlertTriangle, Settings, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface CVAnalyzerProps {
@@ -138,34 +138,61 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   };
 
   const navigateToSettings = () => {
-    navigate('/settings');
+    navigate('/admin/settings');
   };
 
-  const renderError = () => (
-    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-      <div className="flex flex-col items-center gap-3">
-        <AlertTriangle className="h-10 w-10 text-red-500" />
-        <h3 className="text-lg font-medium text-red-800">Analysis Failed</h3>
-        <p className="text-red-600 mb-4">{error}</p>
-        <p className="text-sm text-gray-600 mb-4">
-          {error?.includes('API key') || error?.includes('network') || error?.includes('fetch')
-            ? "Please check your Anthropic API key in the Settings page or check your internet connection." 
-            : "There was a problem analyzing your CV. Please try again."}
-        </p>
-        <div className="flex gap-3">
-          <Button onClick={analyzeCV} variant="default">
-            Try Again
-          </Button>
-          {(error?.includes('API key') || error?.includes('network') || error?.includes('fetch')) && (
+  const renderError = () => {
+    const isApiKeyError = error?.toLowerCase().includes('api key') || 
+                          error?.toLowerCase().includes('anthropic');
+    const isNetworkError = error?.toLowerCase().includes('network') || 
+                           error?.toLowerCase().includes('fetch') || 
+                           error?.toLowerCase().includes('timeout');
+                          
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <div className="flex flex-col items-center gap-3">
+          <AlertTriangle className="h-10 w-10 text-red-500" />
+          <h3 className="text-lg font-medium text-red-800">Analysis Failed</h3>
+          <p className="text-red-600 mb-4">{error}</p>
+          
+          {isApiKeyError ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
+              <p className="font-medium mb-2">API Key Issue Detected</p>
+              <p>Please check that you've entered a valid Anthropic API key in Settings.</p>
+              <a 
+                href="https://console.anthropic.com/account/keys" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline flex items-center mt-2"
+              >
+                Get an Anthropic API key
+                <ExternalLink className="h-3 w-3 ml-1" />
+              </a>
+            </div>
+          ) : isNetworkError ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
+              <p className="font-medium mb-2">Network Issue Detected</p>
+              <p>There seems to be a problem connecting to the Anthropic API. Please check your internet connection and try again.</p>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600 mb-4">
+              There was a problem analyzing your CV. Please try again or check your API settings.
+            </p>
+          )}
+          
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button onClick={analyzeCV} variant="default">
+              Try Again
+            </Button>
             <Button onClick={navigateToSettings} variant="outline">
               <Settings className="h-4 w-4 mr-2" />
               Go to Settings
             </Button>
-          )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -236,3 +263,4 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
 };
 
 export default CVAnalyzer;
+

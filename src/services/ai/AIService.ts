@@ -35,12 +35,26 @@ export class AIService {
   ];
   
   private static apiKeys: Record<string, string> = {};
+  private static keysInitialized = false;
   
   static async initializeApiKeys(): Promise<void> {
     try {
       console.log('Initializing API keys...');
+      if (this.keysInitialized) {
+        console.log('API keys already initialized');
+        return;
+      }
+      
       this.apiKeys = await StorageService.getApiKeys();
+      this.keysInitialized = true;
       console.log('API keys initialized successfully:', Object.keys(this.apiKeys).length > 0 ? Object.keys(this.apiKeys) : 'No keys found');
+      
+      // Debug: Check if Anthropic key exists
+      if (this.apiKeys['anthropic']) {
+        console.log('Anthropic API key is available in initialized keys');
+      } else {
+        console.log('Anthropic API key not found in initialized keys');
+      }
     } catch (error) {
       console.error('Failed to initialize API keys:', error);
     }
@@ -52,18 +66,45 @@ export class AIService {
       return;
     }
     
-    this.apiKeys[provider.toLowerCase()] = key;
+    // Ensure keys are lowercase for consistency
+    const providerKey = provider.toLowerCase();
+    this.apiKeys[providerKey] = key;
     console.log(`Setting API key for ${provider}`);
     
     // Save to storage
-    StorageService.saveApiKey(provider.toLowerCase(), key)
-      .catch(error => console.error('Error saving API key:', error));
+    StorageService.saveApiKey(providerKey, key)
+      .catch(error => {
+        console.error('Error saving API key to database:', error);
+        console.log('API key saved to memory but not persisted');
+      });
   }
   
   static getApiKey(provider: string): string | null {
-    const key = this.apiKeys[provider.toLowerCase()];
+    if (!this.keysInitialized) {
+      console.log('API keys not initialized yet, initializing now...');
+      // We need to initialize immediately if not done yet
+      this.initializeApiKeys().catch(error => {
+        console.error('Error initializing API keys:', error);
+      });
+    }
+    
+    const providerKey = provider.toLowerCase();
+    const key = this.apiKeys[providerKey];
+    
     // Log whether we found a key (but don't log the actual key)
     console.log(`${provider} API key ${key ? 'found' : 'not found'}`);
+    
+    if (!key) {
+      // Try from environment variables as a fallback for development
+      const envKey = import.meta.env[`VITE_${provider.toUpperCase()}_API_KEY`];
+      if (envKey) {
+        console.log(`Using ${provider} API key from environment variables`);
+        // Cache it for future use
+        this.setApiKey(provider, envKey);
+        return envKey;
+      }
+    }
+    
     return key || null;
   }
   
@@ -81,8 +122,8 @@ export class AIService {
   // Delegate analysis methods to the specialized services
   static async analyzeCV(...args: Parameters<typeof AnalysisService.analyzeCV>) {
     // Make sure API keys are loaded
-    if (Object.keys(this.apiKeys).length === 0) {
-      console.log('No API keys found, initializing before analysis...');
+    if (!this.keysInitialized || Object.keys(this.apiKeys).length === 0) {
+      console.log('API keys not fully loaded, initializing before analysis...');
       await this.initializeApiKeys();
     }
     
@@ -90,6 +131,8 @@ export class AIService {
     const anthropicKey = this.getApiKey('anthropic');
     if (!anthropicKey) {
       console.warn('No Anthropic API key found after initialization');
+    } else {
+      console.log('Anthropic API key is available for analysis');
     }
     
     return AnalysisService.analyzeCV(...args);
@@ -97,7 +140,7 @@ export class AIService {
   
   static async generateTailoredStatement(...args: Parameters<typeof AnalysisService.generateTailoredStatement>) {
     // Make sure API keys are loaded
-    if (Object.keys(this.apiKeys).length === 0) {
+    if (!this.keysInitialized || Object.keys(this.apiKeys).length === 0) {
       await this.initializeApiKeys();
     }
     return AnalysisService.generateTailoredStatement(...args);
