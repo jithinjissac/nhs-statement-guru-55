@@ -51,7 +51,8 @@ const CreateStatement: React.FC = () => {
   const [editedStatement, setEditedStatement] = useState('');
   const [detectionResults, setDetectionResults] = useState<any[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
-  
+  const [jobSpecificExperiences, setJobSpecificExperiences] = useState('');
+
   // Generation options
   const [generationOptions, setGenerationOptions] = useState<StatementGenerationOptions>({
     humanizeLevel: 'high',
@@ -170,10 +171,11 @@ const CreateStatement: React.FC = () => {
       const guidelineContents = guidelines.map(g => g.content);
       const sampleContents = sampleStatements.map(s => s.content);
       
-      // Generate the statement
+      // Generate the statement with the experience statement included
       const statement = await AIService.generateStatement(
         cv.content,
         jobDescription.content,
+        jobSpecificExperiences,
         guidelineContents,
         sampleContents,
         generationOptions
@@ -439,7 +441,7 @@ const CreateStatement: React.FC = () => {
             </CardContent>
           </Card>
           
-          {/* Advanced Analysis (New) */}
+          {/* Advanced Analysis (Updated) */}
           {cv && jobDescription && (
             <div className="md:col-span-2 mt-6">
               <Tabs defaultValue="standard">
@@ -455,6 +457,21 @@ const CreateStatement: React.FC = () => {
                       <div className="mb-4 flex items-center gap-2">
                         <Settings className="h-5 w-5 text-nhs-blue" />
                         <h3 className="text-lg font-semibold">Statement Generation Options</h3>
+                      </div>
+                      
+                      {/* Job-specific experiences input */}
+                      <div className="mb-6">
+                        <Label htmlFor="experience-statement">Additional Experience Statement</Label>
+                        <Textarea
+                          id="experience-statement"
+                          placeholder="Enter any job-specific experiences or details not mentioned in your CV..."
+                          className="mt-2 min-h-[100px]"
+                          value={jobSpecificExperiences}
+                          onChange={(e) => setJobSpecificExperiences(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          This information will be used to personalize your statement with relevant experiences.
+                        </p>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -875,3 +892,4 @@ const CreateStatement: React.FC = () => {
 };
 
 export default CreateStatement;
+

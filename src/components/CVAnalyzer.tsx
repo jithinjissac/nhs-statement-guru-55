@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,7 +23,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [tailoredStatement, setTailoredStatement] = useState('');
   const [jobSpecificExperiences, setJobSpecificExperiences] = useState('');
   const [writingStyle, setWritingStyle] = useState<'simple' | 'moderate' | 'advanced'>('moderate');
-  const [activeTab, setActiveTab] = useState('analysis');
+  const [activeStep, setActiveStep] = useState(1);
 
   const analyzeCV = async () => {
     if (!cv || !jobDescription) {
@@ -36,7 +35,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     try {
       const result = await AIService.analyzeCV(cv, jobDescription);
       setAnalysis(result);
-      setActiveTab('analysis');
+      setActiveStep(2);
       toast.success('CV analysis completed successfully');
     } catch (error) {
       console.error('Error analyzing CV:', error);
@@ -66,7 +65,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         setAnalysis(result.analysis);
       }
       
-      setActiveTab('statement');
+      setActiveStep(3);
       toast.success('Tailored statement generated successfully');
       onStatementGenerated(result.statement);
     } catch (error) {
@@ -81,95 +80,92 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>CV Analysis & Tailored Statement</CardTitle>
+          <CardTitle>Step-by-Step CV Analysis & Statement Generation</CardTitle>
           <CardDescription>
-            Analyze your CV against the job requirements and generate a tailored supporting statement
+            Follow these steps to create a personalized NHS supporting statement
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="job-experiences">Additional Job-Specific Experiences</Label>
-                <Textarea
-                  id="job-experiences"
-                  placeholder="Add any specific experiences relevant to this job that might not be in your CV..."
-                  className="min-h-[120px]"
-                  value={jobSpecificExperiences}
-                  onChange={(e) => setJobSpecificExperiences(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="writing-style">Writing Style</Label>
-                <Select 
-                  value={writingStyle}
-                  onValueChange={(value: any) => setWritingStyle(value)}
-                >
-                  <SelectTrigger id="writing-style">
-                    <SelectValue placeholder="Select writing style" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="simple">Simple (GCSE Level)</SelectItem>
-                    <SelectItem value="moderate">Moderate (A-Level)</SelectItem>
-                    <SelectItem value="advanced">Advanced (University Level)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Simple writing style uses shorter sentences and simpler vocabulary, which may appear more human-written.
-                </p>
+          <div className="space-y-8">
+            {/* Step 1: Initial Information */}
+            <div className={`border rounded-lg p-4 ${activeStep === 1 ? 'bg-muted/50 border-primary' : ''}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                  1
+                </div>
+                <div className="space-y-4 w-full">
+                  <h3 className="text-lg font-medium">Provide Additional Details</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="job-experiences">Additional Job-Specific Experiences</Label>
+                      <Textarea
+                        id="job-experiences"
+                        placeholder="Add any specific experiences relevant to this job that might not be in your CV..."
+                        className="min-h-[120px]"
+                        value={jobSpecificExperiences}
+                        onChange={(e) => setJobSpecificExperiences(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Include specific achievements, projects, and experiences that match this particular role.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="writing-style">Writing Style</Label>
+                      <Select 
+                        value={writingStyle}
+                        onValueChange={(value: any) => setWritingStyle(value)}
+                      >
+                        <SelectTrigger id="writing-style">
+                          <SelectValue placeholder="Select writing style" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="simple">Simple (GCSE Level)</SelectItem>
+                          <SelectItem value="moderate">Moderate (A-Level)</SelectItem>
+                          <SelectItem value="advanced">Advanced (University Level)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Simple writing style uses shorter sentences and simpler vocabulary, which may appear more human-written.
+                      </p>
+                    </div>
+                    
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={analyzeCV}
+                        disabled={isAnalyzing || !cv || !jobDescription}
+                      >
+                        {isAnalyzing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>Continue to Analysis</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={analyzeCV}
-                disabled={isAnalyzing || !cv || !jobDescription}
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>Analyze CV</>
-                )}
-              </Button>
-              <Button
-                onClick={generateTailoredStatement}
-                disabled={isGenerating || !cv || !jobDescription}
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    Generate Tailored Statement
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {(analysis || tailoredStatement) && (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="analysis">CV Analysis</TabsTrigger>
-                <TabsTrigger value="statement">Tailored Statement</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="analysis" className="mt-4 space-y-4">
-                {analysis && (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Relevant Skills</CardTitle>
-                        </CardHeader>
-                        <CardContent>
+            
+            {/* Step 2: CV Analysis */}
+            <div className={`border rounded-lg p-4 ${activeStep === 2 ? 'bg-muted/50 border-primary' : activeStep > 2 ? 'opacity-80' : 'opacity-60'}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                  2
+                </div>
+                <div className="space-y-4 w-full">
+                  <h3 className="text-lg font-medium">CV Analysis</h3>
+                  
+                  {analysis ? (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Skills and Requirements */}
+                        <div className="space-y-4">
+                          <h4 className="font-medium">Relevant Skills</h4>
                           <div className="flex flex-wrap gap-2">
                             {analysis.relevantSkills.map((skill, index) => (
                               <Badge key={index} variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
@@ -177,16 +173,9 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                               </Badge>
                             ))}
                           </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Job Requirements</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium flex items-center">
+                          
+                          <div className="space-y-2 mt-4">
+                            <h4 className="font-medium flex items-center">
                               <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
                               Matched Requirements
                             </h4>
@@ -197,8 +186,8 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                             </ul>
                           </div>
 
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium flex items-center">
+                          <div className="space-y-2 mt-4">
+                            <h4 className="font-medium flex items-center">
                               <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
                               Missing Requirements
                             </h4>
@@ -208,18 +197,14 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                               ))}
                             </ul>
                           </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Relevant Experience</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
+                        </div>
+                        
+                        {/* Experience */}
+                        <div className="space-y-4">
+                          <h4 className="font-medium">Relevant Experience</h4>
+                          
                           <div className="space-y-2">
-                            <h4 className="text-sm font-medium">Clinical Experience</h4>
+                            <h5 className="text-sm font-medium">Clinical Experience</h5>
                             <ul className="text-sm space-y-1">
                               {analysis.relevantExperience.clinical.map((exp, index) => (
                                 <li key={index}>{exp}</li>
@@ -227,52 +212,91 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                             </ul>
                           </div>
 
-                          <div className="space-y-2">
-                            <h4 className="text-sm font-medium">Non-Clinical Experience</h4>
+                          <div className="space-y-2 mt-4">
+                            <h5 className="text-sm font-medium">Non-Clinical Experience</h5>
                             <ul className="text-sm space-y-1">
                               {analysis.relevantExperience.nonClinical.map((exp, index) => (
                                 <li key={index}>{exp}</li>
                               ))}
                             </ul>
                           </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Recommendations</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="text-sm space-y-2">
-                            {analysis.recommendedHighlights.map((rec, index) => (
-                              <li key={index} className="flex">
-                                <ArrowRight className="h-4 w-4 text-blue-500 mr-2 flex-shrink-0 mt-0.5" />
-                                <span>{rec}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
+                          
+                          {/* NHS Values */}
+                          <div className="space-y-2 mt-4">
+                            <h5 className="text-sm font-medium">NHS Values Identified</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {analysis.nhsValues.map((value, index) => (
+                                <Badge key={index} variant="default" className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                  {value}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Recommendations */}
+                      <div>
+                        <h4 className="font-medium mb-2">Recommendations</h4>
+                        <ul className="text-sm space-y-2">
+                          {analysis.recommendedHighlights.map((rec, index) => (
+                            <li key={index} className="flex">
+                              <ArrowRight className="h-4 w-4 text-blue-500 mr-2 flex-shrink-0 mt-0.5" />
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      <div className="flex justify-end">
+                        <Button
+                          onClick={generateTailoredStatement}
+                          disabled={isGenerating}
+                        >
+                          {isGenerating ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>Generate Tailored Statement</>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </>
-                )}
-              </TabsContent>
-
-              <TabsContent value="statement" className="mt-4">
-                {tailoredStatement ? (
-                  <Textarea
-                    value={tailoredStatement}
-                    onChange={(e) => setTailoredStatement(e.target.value)}
-                    className="min-h-[300px] font-medium"
-                  />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Generate a tailored statement to view it here
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Complete step 1 to analyze your CV against the job requirements
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Step 3: Generated Statement */}
+            <div className={`border rounded-lg p-4 ${activeStep === 3 ? 'bg-muted/50 border-primary' : 'opacity-60'}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                  3
+                </div>
+                <div className="space-y-4 w-full">
+                  <h3 className="text-lg font-medium">Tailored Statement</h3>
+                  
+                  {tailoredStatement ? (
+                    <Textarea
+                      value={tailoredStatement}
+                      onChange={(e) => setTailoredStatement(e.target.value)}
+                      className="min-h-[300px] font-medium"
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Complete steps 1 and 2 to generate your tailored statement
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -32,6 +32,7 @@ export type CVAnalysisResult = {
   matchedRequirements: string[];
   missingRequirements: string[];
   recommendedHighlights: string[];
+  nhsValues: string[];
 };
 
 export class AIService {
@@ -87,6 +88,48 @@ export class AIService {
   }
   
   /**
+   * Extracts NHS values mentioned in the job description
+   */
+  private static extractNHSValues(jobDescription: string): string[] {
+    const commonNHSValues = [
+      'respect and dignity',
+      'commitment to quality of care',
+      'compassion',
+      'improving lives',
+      'working together for patients',
+      'everyone counts',
+      'patient-centered care',
+      'integrity',
+      'equality',
+      'diversity',
+      'inclusion',
+      'transparency',
+      'accountability'
+    ];
+    
+    const foundValues: string[] = [];
+    
+    for (const value of commonNHSValues) {
+      if (jobDescription.toLowerCase().includes(value.toLowerCase())) {
+        foundValues.push(value);
+      }
+    }
+    
+    // If we didn't find any specific values, return default core NHS values
+    if (foundValues.length === 0) {
+      return [
+        'respect and dignity',
+        'commitment to quality of care',
+        'compassion',
+        'improving lives',
+        'working together for patients'
+      ];
+    }
+    
+    return foundValues;
+  }
+  
+  /**
    * Analyzes CV against job requirements to identify matches and gaps
    */
   static async analyzeCV(
@@ -94,6 +137,8 @@ export class AIService {
     jobDescription: string
   ): Promise<CVAnalysisResult> {
     await new Promise(resolve => setTimeout(resolve, 2500));
+    
+    const nhsValues = this.extractNHSValues(jobDescription);
     
     return {
       relevantSkills: [
@@ -130,7 +175,8 @@ export class AIService {
         'Highlight your patient-centered approach',
         'Mention specific examples of multidisciplinary collaboration',
         'Quantify improvements you\'ve achieved in previous roles'
-      ]
+      ],
+      nhsValues: nhsValues
     };
   }
   
@@ -140,11 +186,12 @@ export class AIService {
   static async generateStatement(
     cv: string,
     jobDescription: string,
+    experienceStatement: string,
     guidelines: string[], 
     examples: string[],
     options: StatementGenerationOptions
   ): Promise<string> {
-    const prompt = this.buildPrompt(cv, jobDescription, guidelines, examples, options);
+    const prompt = this.buildPrompt(cv, jobDescription, experienceStatement, guidelines, examples, options);
     
     const enabledModels = this.models.filter(m => m.enabled);
     if (enabledModels.length === 0) {
@@ -171,21 +218,28 @@ I am excited about the opportunity to bring my skills and experience to your tea
   }
   
   /**
-   * Builds an optimized prompt for AI text generation
+   * Builds an optimized prompt for AI text generation including all necessary context
    */
   private static buildPrompt(
     cv: string,
     jobDescription: string,
+    experienceStatement: string,
     guidelines: string[],
     examples: string[],
     options: StatementGenerationOptions
   ): string {
+    const nhsValues = this.extractNHSValues(jobDescription);
+    const nhsValuesString = nhsValues.join(', ');
+    
     return `Create an NHS job application supporting statement that sounds natural and human-written.
     
 CV: ${cv.substring(0, 1000)}...
 Job Description: ${jobDescription.substring(0, 1000)}...
+Additional Experience Statement: ${experienceStatement}
 Guidelines: ${guidelines.join('\n')}
 Examples: ${examples.join('\n')}
+
+Important NHS Values identified in the job description: ${nhsValuesString}
 
 Tone: ${options.tone}
 Detail Level: ${options.detailLevel}
@@ -194,15 +248,16 @@ Humanize Level: ${options.humanizeLevel}
 
 The supporting statement should:
 1. Be tailored specifically to the job description
-2. Highlight relevant experience from the CV
-3. Demonstrate understanding of NHS values
+2. Highlight relevant experience from the CV and the additional experience statement
+3. Demonstrate understanding of NHS values specifically mentioned in the job description
 4. Include specific, concrete examples
 5. Avoid AI-like patterns such as repetitive structures
 6. Vary sentence length and structure
 7. Include appropriate professional language
 8. Use first-person perspective naturally
 9. Sound conversational yet professional
-10. Avoid excessive buzzwords and overly formal language`;
+10. Avoid excessive buzzwords and overly formal language
+11. Reference at least 3-4 of the NHS values identified (${nhsValuesString})`;
   }
   
   /**
@@ -221,10 +276,17 @@ The supporting statement should:
     
     let statement = '';
     
+    // Include NHS values in the statement
+    const nhsValuesText = analysis.nhsValues.length > 0 
+      ? `I strongly align with the NHS values of ${analysis.nhsValues.join(', ')}, which I've demonstrated throughout my career.`
+      : 'I strongly align with core NHS values, which I\'ve demonstrated throughout my career.';
+    
     if (writingStyle === 'simple') {
       statement = `I'm writing to apply for the NHS job that was advertised recently. I've worked in healthcare for a few years now and really enjoy helping patients.
 
 In my last job, I worked as a nurse for 3 years where I looked after patients, gave them medicine, and worked with doctors. I'm good at talking to patients and making them feel better when they're worried. I also know how to use computers to update patient records.
+
+${nhsValuesText}
 
 I noticed that the job asks for experience with the NHS records system. While I haven't used that specific system, I've used similar ones and learn new systems quickly. I'd be happy to get training on this.
 
@@ -235,6 +297,8 @@ Thank you for considering my application. I'm excited about the possibility of j
       statement = `I am writing to express my interest in the advertised position within the NHS, bringing with me over three years of clinical experience that aligns well with the requirements outlined in your job description.
 
 Throughout my career in healthcare, I have developed strong skills in patient assessment, medication administration, and healthcare record management. While working at Central Hospital, I coordinated emergency responses and developed comprehensive care plans that improved patient outcomes by 15%. I've consistently demonstrated my ability to work effectively within multidisciplinary teams, collaborating with doctors, physiotherapists, and social workers to ensure holistic patient care.
+
+${nhsValuesText} For example, I've always ensured patients are treated with respect and dignity by involving them in decisions about their care and providing clear information about treatment options.
 
 I note that experience with the NHS electronic records system is required. Although my primary experience has been with the EMIS system, I am confident in my ability to quickly adapt to new systems. My computer literacy and eagerness to learn have consistently enabled me to master new technologies efficiently.
 
