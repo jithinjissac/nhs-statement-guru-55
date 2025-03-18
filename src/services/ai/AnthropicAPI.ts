@@ -13,23 +13,36 @@ export class AnthropicAPI {
       let finalApiKey;
       
       try {
-        // Get API key from storage service
-        const apiKey = await AIService.getApiKey('anthropic');
-        
-        if (apiKey) {
-          finalApiKey = apiKey;
-          console.log("Using API key from storage service");
+        // Prefer localStorage directly to avoid database policy issues
+        const localStorageKeys = await AIService.getApiKeysFromLocalStorage?.() || {};
+        if (localStorageKeys.anthropic) {
+          finalApiKey = localStorageKeys.anthropic;
+          console.log("Using API key from local storage");
         } else {
-          // Check if we're in development environment with a fallback key
-          const fallbackKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+          // Try storage service as fallback
+          try {
+            const apiKey = await AIService.getApiKey('anthropic');
+            
+            if (apiKey) {
+              finalApiKey = apiKey;
+              console.log("Using API key from storage service");
+            }
+          } catch (storageError) {
+            console.log("Error getting API key from storage service, checking environment", storageError);
+          }
           
-          if (fallbackKey) {
-            console.log("Using fallback API key from environment variables");
-            // Store the key for future use
-            AIService.setApiKey('anthropic', fallbackKey);
-            finalApiKey = fallbackKey;
-          } else {
-            throw new Error('Anthropic API key not set. Please set it in the Settings page.');
+          // Check if we're in development environment with a fallback key
+          if (!finalApiKey) {
+            const fallbackKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+            
+            if (fallbackKey) {
+              console.log("Using fallback API key from environment variables");
+              // Store the key for future use
+              AIService.setApiKey('anthropic', fallbackKey);
+              finalApiKey = fallbackKey;
+            } else {
+              throw new Error('Anthropic API key not set. Please set it in the Settings page.');
+            }
           }
         }
       } catch (keyError) {
@@ -100,7 +113,10 @@ export class AnthropicAPI {
             
             // Try the Supabase Edge Function approach
             const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
-              body: payload
+              body: {
+                ...payload,
+                apiKey: finalApiKey // Pass the API key to the edge function
+              }
             });
             
             // Clear the timeout since we got a response
