@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -15,6 +14,13 @@ export type SampleStatement = {
   content: string;
   category: string;
   dateAdded: string;
+};
+
+export type ApiKey = {
+  id: string;
+  name: string;
+  key: string;
+  active: boolean;
 };
 
 export class StorageService {
@@ -158,6 +164,78 @@ export class StorageService {
     } catch (error) {
       console.error('Error deleting sample statement:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Save an API key to Supabase
+   */
+  static async saveApiKey(provider: string, keyValue: string): Promise<void> {
+    try {
+      if (!keyValue.trim()) return;
+      
+      // Generate a unique ID if not provided
+      const id = uuidv4();
+      
+      // Try to find an existing API key for this provider
+      const { data: existingKeys } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('name', provider);
+      
+      if (existingKeys && existingKeys.length > 0) {
+        // Update existing key
+        const { error } = await supabase
+          .from('api_keys')
+          .update({
+            key: keyValue,
+            updated_at: new Date().toISOString()
+          })
+          .eq('name', provider);
+        
+        if (error) throw error;
+      } else {
+        // Insert new key
+        const { error } = await supabase
+          .from('api_keys')
+          .insert({
+            id: id,
+            name: provider,
+            key: keyValue,
+            active: true,
+            created_by: id // This is a workaround as we don't have auth yet
+          });
+        
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get all API keys from Supabase
+   */
+  static async getApiKeys(): Promise<Record<string, string>> {
+    try {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('*')
+        .eq('active', true);
+      
+      if (error) throw error;
+      
+      // Convert to record object
+      const keys: Record<string, string> = {};
+      (data || []).forEach(item => {
+        keys[item.name.toLowerCase()] = item.key;
+      });
+      
+      return keys;
+    } catch (error) {
+      console.error('Failed to fetch API keys:', error);
+      return {};
     }
   }
   

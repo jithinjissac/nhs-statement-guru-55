@@ -80,12 +80,17 @@ export class AIService {
    */
   private static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
     try {
-      // We're using the stored secret ANTHROPIC_API_KEY from Supabase
+      const apiKey = this.getApiKey('anthropic');
+      
+      if (!apiKey) {
+        throw new Error('Anthropic API key not set. Please set it in the Settings page.');
+      }
+      
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': 'ANTHROPIC_API_KEY', // This will be replaced by Supabase with the actual secret
+          'x-api-key': apiKey,
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
@@ -851,101 +856,3 @@ Return the response as a valid JSON object with the following structure:
    */
   static async generateTailoredStatement(
     cv: string,
-    jobDescription: string,
-    additionalInfo: string = '',
-    style: 'simple' | 'professional' | 'detailed' = 'simple',
-    progressCallback?: (stage: string, percent: number) => void
-  ): Promise<{ statement: string, analysis: CVAnalysisResult }> {
-    progressCallback?.('Initializing', 5);
-    
-    try {
-      // First, analyze the CV if not already done
-      progressCallback?.('Analyzing CV', 15);
-      const analysis = await this.analyzeCV(cv, jobDescription, additionalInfo, 
-        (stage, percent) => progressCallback?.(`CV Analysis: ${stage}`, Math.floor(percent * 0.4))
-      );
-      
-      progressCallback?.('Preparing statement generation', 45);
-      
-      // Determine the audience level based on style
-      let audienceLevel = 'GCSE level (simple, clear language)';
-      if (style === 'professional') {
-        audienceLevel = 'Professional level (articulate, using industry terminology)';
-      } else if (style === 'detailed') {
-        audienceLevel = 'Detailed academic level (comprehensive, using sophisticated language)';
-      }
-      
-      // Create a concise summary of the analysis
-      const matchedRequirements = analysis.matchedRequirements.map(item => 
-        `- ${item.requirement.replace(/^\[(Essential|Desirable)\]\s+/, '')}`
-      ).join('\n');
-      
-      const missingRequirements = analysis.missingRequirements.map(item => 
-        `- ${item.replace(/^\[(Essential|Desirable)\]\s+/, '')}`
-      ).join('\n');
-      
-      const highlights = analysis.recommendedHighlights.join('\n- ');
-      const nhsValues = analysis.nhsValues.join(', ');
-      
-      // Create the prompt
-      const messages = [
-        {
-          role: "user",
-          content: `Please write a compelling NHS job application supporting statement based on this analysis of a CV against a job description.
-
-CV Summary:
-- Relevant skills: ${analysis.relevantSkills.join(', ')}
-- Clinical experience: ${analysis.relevantExperience.clinical.join(', ')}
-- Non-clinical experience: ${analysis.relevantExperience.nonClinical.join(', ')}
-- Administrative experience: ${analysis.relevantExperience.administrative.join(', ')}
-- Years of experience: ${analysis.relevantExperience.yearsOfExperience}
-- Education: ${analysis.education.join(', ')}
-
-Job Requirements Met:
-${matchedRequirements}
-
-Job Requirements Needing Attention:
-${missingRequirements}
-
-Recommended Highlights:
-- ${highlights}
-
-NHS Values to Emphasize:
-${nhsValues}
-
-${additionalInfo ? `Additional Information Provided by Applicant:
-${additionalInfo}` : ''}
-
-Instructions:
-1. Write a compelling supporting statement at ${audienceLevel} reading level
-2. Focus on how the applicant's experience and skills match the job requirements
-3. Address the NHS values specifically
-4. Don't mention "CV" or "resume" directly; write in first person ("I have...")
-5. Include specific achievements with numbers where possible
-6. Acknowledge and address any gaps in meeting requirements
-7. Keep the statement between 500-800 words
-8. Format with clear paragraphs
-9. Do not use bullet points; write in proper prose
-10. Start with a brief introduction about why you're interested in the role`
-        }
-      ];
-      
-      progressCallback?.('Generating statement', 50);
-      const response = await this.callAnthropic(messages, 4000);
-      progressCallback?.('Processing AI response', 90);
-      
-      // Extract the statement text
-      const statement = response.content[0].text.trim();
-      
-      progressCallback?.('Statement generated', 100);
-      
-      return {
-        statement, 
-        analysis
-      };
-    } catch (error) {
-      console.error('Error generating statement:', error);
-      throw error;
-    }
-  }
-}

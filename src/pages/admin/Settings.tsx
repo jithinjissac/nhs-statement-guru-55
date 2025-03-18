@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,98 +33,118 @@ const AdminSettings: React.FC = () => {
   // Stats for system status card
   const [guidelinesCount, setGuidelinesCount] = useState(0);
   const [sampleStatementsCount, setSampleStatementsCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Load saved settings on mount
   useEffect(() => {
-    const savedSettings = StorageService.getSettings();
-    if (savedSettings) {
-      // Load general settings
-      if (savedSettings.general) {
-        setGeneralSettings(prevSettings => ({
-          ...prevSettings,
-          ...savedSettings.general
-        }));
-      }
-      
-      // Load API keys (in a real app, these would be stored securely)
-      if (savedSettings.apiKeys) {
-        setApiKeys(savedSettings.apiKeys);
-        
-        // Set API keys in the AIService
-        Object.entries(savedSettings.apiKeys).forEach(([provider, key]) => {
-          if (key) {
-            AIService.setApiKey(provider, key as string);
-          }
-        });
-      }
-      
-      // Load model settings
-      if (savedSettings.models) {
-        const updatedModels = models.map(model => {
-          const savedModel = savedSettings.models.find((m: any) => m.id === model.id);
-          if (savedModel) {
-            return {
-              ...model,
-              enabled: savedModel.enabled,
-              temperature: savedModel.temperature || model.temperature,
-              maxTokens: savedModel.maxTokens || model.maxTokens
-            };
-          }
-          return model;
-        });
-        
-        setModels(updatedModels);
-        
-        // Update models in AIService
-        updatedModels.forEach(model => {
-          AIService.setModelEnabled(model.id, model.enabled);
-        });
-      }
-    }
-
-    // Load counts for system status
-    const loadCounts = async () => {
+    const loadSettings = async () => {
       try {
+        setIsLoading(true);
+        
+        // Load API keys from database
+        const savedApiKeys = await StorageService.getApiKeys();
+        if (Object.keys(savedApiKeys).length > 0) {
+          setApiKeys(prevKeys => ({
+            ...prevKeys,
+            ...savedApiKeys
+          }));
+          
+          // Also set the API keys in AIService
+          Object.entries(savedApiKeys).forEach(([provider, key]) => {
+            if (key) {
+              AIService.setApiKey(provider, key as string);
+            }
+          });
+        }
+        
+        // Load general settings from local storage
+        const savedSettings = StorageService.getSettings();
+        if (savedSettings) {
+          // Load general settings
+          if (savedSettings.general) {
+            setGeneralSettings(prevSettings => ({
+              ...prevSettings,
+              ...savedSettings.general
+            }));
+          }
+          
+          // Load model settings
+          if (savedSettings.models) {
+            const updatedModels = models.map(model => {
+              const savedModel = savedSettings.models.find((m: any) => m.id === model.id);
+              if (savedModel) {
+                return {
+                  ...model,
+                  enabled: savedModel.enabled,
+                  temperature: savedModel.temperature || model.temperature,
+                  maxTokens: savedModel.maxTokens || model.maxTokens
+                };
+              }
+              return model;
+            });
+            
+            setModels(updatedModels);
+            
+            // Update models in AIService
+            updatedModels.forEach(model => {
+              AIService.setModelEnabled(model.id, model.enabled);
+            });
+          }
+        }
+
+        // Load counts for system status
         const guidelines = await StorageService.getGuidelines();
         setGuidelinesCount(guidelines.length);
 
         const sampleStatements = await StorageService.getSampleStatements();
         setSampleStatementsCount(sampleStatements.length);
       } catch (error) {
-        console.error('Error loading counts:', error);
+        console.error('Error loading settings:', error);
+        toast.error('Failed to load settings');
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    loadCounts();
+    loadSettings();
   }, []);
   
   // Save all settings
-  const saveSettings = () => {
-    // Save general settings
-    StorageService.saveSettings({
-      general: generalSettings,
-      apiKeys: apiKeys,
-      models: models.map(model => ({
-        id: model.id,
-        enabled: model.enabled,
-        temperature: model.temperature,
-        maxTokens: model.maxTokens
-      }))
-    });
-    
-    // Update API keys in the AIService
-    Object.entries(apiKeys).forEach(([provider, key]) => {
-      if (key) {
-        AIService.setApiKey(provider, key);
+  const saveSettings = async () => {
+    setIsLoading(true);
+    try {
+      // Save API keys to the database
+      for (const [provider, key] of Object.entries(apiKeys)) {
+        if (key && key.trim() !== '') {
+          await StorageService.saveApiKey(provider, key);
+          // Also update the API keys in AIService
+          AIService.setApiKey(provider, key);
+        }
       }
-    });
-    
-    // Update models in AIService
-    models.forEach(model => {
-      AIService.setModelEnabled(model.id, model.enabled);
-    });
-    
-    toast.success('Settings saved successfully');
+      
+      // Save general settings to local storage
+      StorageService.saveSettings({
+        general: generalSettings,
+        models: models.map(model => ({
+          id: model.id,
+          enabled: model.enabled,
+          temperature: model.temperature,
+          maxTokens: model.maxTokens
+        }))
+      });
+      
+      // Update models in AIService
+      models.forEach(model => {
+        AIService.setModelEnabled(model.id, model.enabled);
+      });
+      
+      toast.success('Settings saved successfully');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Failed to save settings');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Handle API key changes
@@ -172,7 +193,9 @@ const AdminSettings: React.FC = () => {
             Configure application settings and API keys
           </p>
         </div>
-        <Button onClick={saveSettings}>Save All Settings</Button>
+        <Button onClick={saveSettings} disabled={isLoading}>
+          {isLoading ? 'Saving...' : 'Save All Settings'}
+        </Button>
       </div>
       
       <Tabs defaultValue="api-keys" className="space-y-6">
@@ -199,8 +222,7 @@ const AdminSettings: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Important</AlertTitle>
                 <AlertDescription>
-                  In a production environment, API keys should be stored securely on the server side.
-                  This implementation is for demonstration purposes only.
+                  API keys are stored securely in the database. Enter your API keys below to enable AI features.
                 </AlertDescription>
               </Alert>
               
@@ -249,7 +271,9 @@ const AdminSettings: React.FC = () => {
               </div>
             </CardContent>
             <CardFooter>
-              <Button onClick={saveSettings}>Save API Keys</Button>
+              <Button onClick={saveSettings} disabled={isLoading}>
+                {isLoading ? 'Saving...' : 'Save API Keys'}
+              </Button>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -310,7 +334,9 @@ const AdminSettings: React.FC = () => {
               ))}
             </CardContent>
             <CardFooter>
-              <Button onClick={saveSettings}>Save Model Settings</Button>
+              <Button onClick={saveSettings} disabled={isLoading}>
+                {isLoading ? 'Saving...' : 'Save Model Settings'}
+              </Button>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -401,7 +427,9 @@ const AdminSettings: React.FC = () => {
               </div>
             </CardContent>
             <CardFooter>
-              <Button onClick={saveSettings}>Save General Settings</Button>
+              <Button onClick={saveSettings} disabled={isLoading}>
+                {isLoading ? 'Saving...' : 'Save General Settings'}
+              </Button>
             </CardFooter>
           </Card>
           
