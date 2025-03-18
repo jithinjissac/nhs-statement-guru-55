@@ -39,7 +39,7 @@ export class AnthropicAPI {
             if (fallbackKey) {
               console.log("Using fallback API key from environment variables");
               // Store the key for future use
-              AIService.setApiKey('anthropic', fallbackKey);
+              StorageService.storeApiKey('anthropic', fallbackKey);
               finalApiKey = fallbackKey;
             } else {
               throw new Error('Anthropic API key not set. Please set it in the Settings page.');
@@ -100,7 +100,7 @@ export class AnthropicAPI {
         
         // Add retry logic for network flakiness
         let retries = 0;
-        const maxRetries = 2;
+        const maxRetries = 3;
         let lastError: Error | null = null;
         
         // Use the Supabase Edge Function to avoid CORS issues
@@ -108,6 +108,8 @@ export class AnthropicAPI {
           try {
             if (retries > 0) {
               console.log(`Retry attempt ${retries}/${maxRetries}`);
+              // Add exponential backoff for retries
+              await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries) * 1000));
             }
             
             console.log("Calling Anthropic API through Edge Function proxy...");
@@ -125,11 +127,24 @@ export class AnthropicAPI {
             
             if (error) {
               console.error("Edge function error:", error);
-              throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
+              
+              // Special handling for common edge function errors
+              if (error.message && error.message.includes('deployed')) {
+                throw new Error(`Edge Function not deployed or not responding. Please make sure the Edge Function is deployed properly.`);
+              } else {
+                throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
+              }
             }
             
-            if (data.error) {
+            if (data && data.error) {
               console.error("Anthropic API error via Edge Function:", data.error);
+              
+              // Handle specific API key errors
+              if (data.error.status === 401 || 
+                  (data.error.message && data.error.message.includes('API key'))) {
+                throw new Error(`Invalid API key. Please check your Anthropic API key in Settings.`);
+              }
+              
               throw new Error(`Anthropic API error: ${data.error.message || JSON.stringify(data.error)}`);
             }
             
@@ -137,7 +152,7 @@ export class AnthropicAPI {
             console.log("Response preview:", JSON.stringify(data).substring(0, 200) + "...");
             
             // Validate the response structure before returning
-            if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+            if (!data || !data.content || !Array.isArray(data.content) || data.content.length === 0) {
               console.warn("Unexpected response structure from Anthropic API:", JSON.stringify(data).substring(0, 200));
               throw new Error("Invalid response structure from Anthropic API");
             }
@@ -150,20 +165,19 @@ export class AnthropicAPI {
             if (fetchAttemptError.name === 'AbortError' || 
                 (fetchAttemptError instanceof Error && 
                  (fetchAttemptError.message.includes('401') || 
-                  fetchAttemptError.message.includes('403')))) {
+                  fetchAttemptError.message.includes('API key')))) {
               throw fetchAttemptError;
             }
             
             // Only retry network errors or 5xx server errors
             if (fetchAttemptError instanceof TypeError || 
                 (fetchAttemptError instanceof Error && 
-                 fetchAttemptError.message.includes('5'))) {
+                 (fetchAttemptError.message.includes('5') || 
+                  fetchAttemptError.message.includes('network') || 
+                  fetchAttemptError.message.includes('deployed') || 
+                  fetchAttemptError.message.includes('Edge Function')))) {
               retries++;
               if (retries <= maxRetries) {
-                // Exponential backoff: 1s, 2s, 4s...
-                const backoffMs = Math.pow(2, retries - 1) * 1000;
-                console.log(`Network/server error, waiting ${backoffMs}ms before retry...`);
-                await new Promise(resolve => setTimeout(resolve, backoffMs));
                 continue;
               }
             }
@@ -188,7 +202,7 @@ export class AnthropicAPI {
         // Check for network-related errors
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
           console.error('Network error when calling Anthropic API:', fetchError);
-          throw new Error('Network issue detected when calling Anthropic API. Please make sure the Edge Function is deployed properly and try again.');
+          throw new Error('Network issue detected when calling Anthropic API. Please check your internet connection and try again.');
         }
         
         // Log the detailed error for debugging
@@ -196,7 +210,12 @@ export class AnthropicAPI {
         
         // Re-throw the error with a more informative message
         if (fetchError.message.includes('Edge function error')) {
-          throw new Error(`Edge function error: ${fetchError.message}. Please check that the Edge Function is deployed and the API key is valid.`);
+          // Improved messaging for edge function errors
+          if (fetchError.message.includes('deployed')) {
+            throw new Error(`The Edge Function is not properly deployed. Please wait a few moments and try again.`);
+          } else {
+            throw new Error(`Edge function error: ${fetchError.message}. Please check that the API key is valid.`);
+          }
         }
         
         throw fetchError;

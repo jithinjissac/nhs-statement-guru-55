@@ -56,14 +56,24 @@ serve(async (req) => {
       );
     }
 
-    // Get the API key, first checking if it's provided in the request
-    // then falling back to environment variable
-    let apiKey = body.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
+    // Get the API key from various sources with improved error handling
+    let apiKey = body.apiKey;
+    
+    // If no API key in request, try environment variable
+    if (!apiKey) {
+      apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+      console.log("Using API key from environment variable");
+    }
     
     if (!apiKey) {
-      console.error("No API key provided");
+      console.error("No API key available");
       return new Response(
-        JSON.stringify({ error: { message: 'No API key provided' } }),
+        JSON.stringify({ 
+          error: { 
+            message: 'API key is required. Please provide it in the request or set the ANTHROPIC_API_KEY environment variable.',
+            code: 'missing_api_key'
+          } 
+        }),
         {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -82,8 +92,9 @@ serve(async (req) => {
     };
 
     console.log(`Making request to Anthropic API with ${payload.messages.length} messages`);
+    console.log(`Model: ${payload.model}`);
 
-    // Make the request to Anthropic API
+    // Make the request to Anthropic API with improved error handling
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -96,28 +107,45 @@ serve(async (req) => {
 
     // Check if response is ok
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error(`Anthropic API error (${response.status}):`, errorData);
+      const errorStatus = response.status;
+      let errorData;
+      
       try {
-        // Try to parse as JSON for better error reporting
-        const errorJson = JSON.parse(errorData);
-        return new Response(
-          JSON.stringify({ error: { message: `Anthropic API error: ${response.status}`, details: errorJson } }),
-          {
-            status: response.status,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          }
-        );
+        // Try to parse error response as JSON
+        errorData = await response.json();
       } catch {
-        // If not valid JSON, return as text
-        return new Response(
-          JSON.stringify({ error: { message: `Anthropic API error: ${response.status}`, details: errorData } }),
-          {
-            status: response.status,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          }
-        );
+        // If not JSON, get as text
+        const errorText = await response.text();
+        errorData = { message: errorText || 'Unknown error from Anthropic API' };
       }
+      
+      // Log detailed error information
+      console.error(`Anthropic API error (${errorStatus}):`, JSON.stringify(errorData));
+      
+      // Map common error codes to more helpful messages
+      let userMessage = `Anthropic API error: ${errorStatus}`;
+      
+      if (errorStatus === 401) {
+        userMessage = 'Invalid API key. Please check your Anthropic API key and try again.';
+      } else if (errorStatus === 429) {
+        userMessage = 'Rate limit exceeded. Please try again later.';
+      } else if (errorStatus === 500) {
+        userMessage = 'Anthropic API server error. Please try again later.';
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          error: { 
+            message: userMessage,
+            status: errorStatus,
+            details: errorData 
+          } 
+        }),
+        {
+          status: errorStatus,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Parse the Anthropic response
