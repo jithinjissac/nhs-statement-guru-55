@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AIService, CVAnalysisResult } from '@/services/ai';
@@ -9,6 +10,8 @@ import ProgressIndicator from './cv-analyzer/ProgressIndicator';
 import LoadingSpinner from './cv-analyzer/LoadingSpinner';
 import AnalysisStep from './cv-analyzer/AnalysisStep';
 import TailoredStatement from './cv-analyzer/TailoredStatement';
+import { Button } from './ui/button';
+import { AlertTriangle } from 'lucide-react';
 
 interface CVAnalyzerProps {
   cv: string;
@@ -28,6 +31,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [activeStep, setActiveStep] = useState(1);
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (cv && jobDescription && !analysis) {
@@ -49,6 +53,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     setIsAnalyzing(true);
     setProgress(0);
     setProgressStatus('Initializing...');
+    setError(null);
     
     try {
       console.log("Starting CV analysis");
@@ -71,6 +76,8 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       toast.success('CV analysis completed successfully');
     } catch (error) {
       console.error('Error analyzing CV:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
       toast.error('Failed to analyze CV. Please try again.');
     } finally {
       setIsAnalyzing(false);
@@ -93,6 +100,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     setIsGenerating(true);
     setProgress(0);
     setProgressStatus('Starting statement generation...');
+    setError(null);
     
     try {
       const additionalInfo = [
@@ -122,11 +130,30 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       onStatementGenerated(result.statement);
     } catch (error) {
       console.error('Error generating statement:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
       toast.error('Failed to generate statement. Please try again.');
     } finally {
       setIsGenerating(false);
     }
   };
+
+  // Render error state with retry button
+  const renderError = () => (
+    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <AlertTriangle className="h-10 w-10 text-red-500" />
+        <h3 className="text-lg font-medium text-red-800">Analysis Failed</h3>
+        <p className="text-red-600 mb-4">{error}</p>
+        <p className="text-sm text-gray-600 mb-4">
+          {error?.includes('API key') 
+            ? "Please set your Anthropic API key in the Settings page or try again later." 
+            : "There was a problem analyzing your CV. Please try again."}
+        </p>
+        <Button onClick={analyzeCV}>Try Again</Button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -161,7 +188,11 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               />
             )}
             
-            {!isAnalyzing && analysis && activeStep === 2 && (
+            {error && !isAnalyzing && (
+              renderError()
+            )}
+            
+            {!isAnalyzing && !error && analysis && activeStep === 2 && (
               <AnalysisStep 
                 analysis={analysis}
                 unmatchedResponses={unmatchedResponses}

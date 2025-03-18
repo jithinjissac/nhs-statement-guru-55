@@ -10,6 +10,22 @@ export class AnthropicAPI {
       const apiKey = AIService.getApiKey('anthropic');
       
       if (!apiKey) {
+        // Check if we're in development environment with a fallback key
+        const fallbackKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+        
+        if (fallbackKey) {
+          console.log("Using fallback API key from environment variables");
+          // Store the key for future use
+          AIService.setApiKey('anthropic', fallbackKey);
+        } else {
+          throw new Error('Anthropic API key not set. Please set it in the Settings page.');
+        }
+      }
+      
+      // Get the potentially updated key
+      const finalApiKey = AIService.getApiKey('anthropic');
+      
+      if (!finalApiKey) {
         throw new Error('Anthropic API key not set. Please set it in the Settings page.');
       }
       
@@ -17,7 +33,7 @@ export class AnthropicAPI {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
+          'x-api-key': finalApiKey,
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
