@@ -84,6 +84,27 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     }
   };
 
+  // Helper function to render requirement text with appropriate styling
+  const renderRequirementText = (text: string) => {
+    const match = text.match(/^\[(Essential|Desirable)\]\s*/i);
+    if (match) {
+      const tag = match[0];
+      const isEssential = tag.toLowerCase().includes('essential');
+      const tagClass = isEssential ? 
+        'text-red-600 dark:text-red-400 font-medium' : 
+        'text-amber-600 dark:text-amber-400';
+      const remainingText = text.substring(tag.length);
+      
+      return (
+        <>
+          <span className={tagClass}>{tag}</span>
+          {remainingText}
+        </>
+      );
+    }
+    return text;
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -264,12 +285,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                                 {analysis.matchedRequirements.map((req, index) => (
                                   <TableRow key={`matched-${index}`}>
                                     <TableCell className="align-top">
-                                      {req.requirement.replace(/^\[(Essential|Desirable)\]\s*/i, (match) => {
-                                        const tagClass = match.toLowerCase().includes('essential') ? 
-                                          'text-red-600 dark:text-red-400 font-medium' : 
-                                          'text-amber-600 dark:text-amber-400';
-                                        return <span className={tagClass}>{match}</span>;
-                                      })}
+                                      {renderRequirementText(req.requirement)}
                                     </TableCell>
                                     <TableCell className="align-top text-sm">
                                       <span>{req.evidence}</span>
@@ -294,12 +310,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                                 {analysis.missingRequirements.map((req, index) => (
                                   <TableRow key={`missing-${index}`}>
                                     <TableCell className="align-top">
-                                      {req.replace(/^\[(Essential|Desirable)\]\s*/i, (match) => {
-                                        const tagClass = match.toLowerCase().includes('essential') ? 
-                                          'text-red-600 dark:text-red-400 font-medium' : 
-                                          'text-amber-600 dark:text-amber-400';
-                                        return <span className={tagClass}>{match}</span>;
-                                      })}
+                                      {renderRequirementText(req)}
                                     </TableCell>
                                     <TableCell className="align-top text-sm text-muted-foreground">
                                       No matching evidence found in your CV
