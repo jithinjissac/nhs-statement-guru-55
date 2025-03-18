@@ -8,7 +8,7 @@ import LoadingSpinner from './cv-analyzer/LoadingSpinner';
 import AnalysisStep from './cv-analyzer/AnalysisStep';
 import TailoredStatement from './cv-analyzer/TailoredStatement';
 import { Button } from './ui/button';
-import { AlertTriangle, Settings, ExternalLink, Wifi, AlertCircle, Info, Shield } from 'lucide-react';
+import { AlertTriangle, Settings, ExternalLink, Wifi, AlertCircle, Info, Shield, ServerCrash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface CVAnalyzerProps {
@@ -167,6 +167,10 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                              error?.toLowerCase().includes('too many requests') ||
                              error?.toLowerCase().includes('429');
                              
+    const isEdgeFunctionError = error?.toLowerCase().includes('edge function') ||
+                               error?.toLowerCase().includes('function') ||
+                               error?.toLowerCase().includes('proxy');
+                               
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
         <div className="flex flex-col items-center gap-3">
@@ -203,21 +207,42 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                 </Button>
               </div>
             </div>
+          ) : isEdgeFunctionError ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <ServerCrash className="h-4 w-4 flex-shrink-0" />
+                <p className="font-medium">Server Function Issue Detected</p>
+              </div>
+              <p className="mb-2">There's an issue with the server-side function that connects to the Anthropic API.</p>
+              <p className="text-xs mb-2">The application is now using a server-side approach to avoid CORS issues. Please wait a moment for it to be ready.</p>
+              <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={navigateToSettings}
+                  className="text-xs"
+                >
+                  <Settings className="h-3 w-3 mr-1" />
+                  Check API Settings
+                </Button>
+              </div>
+            </div>
           ) : isCorsError ? (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="h-4 w-4 flex-shrink-0" />
-                <p className="font-medium">CORS Issue Detected</p>
+                <p className="font-medium">CORS Issue Being Resolved</p>
               </div>
               <p className="mb-2">Your browser is blocking direct access to the Anthropic API due to security restrictions (CORS).</p>
-              <p className="text-xs mb-2">We're attempting to use a proxy solution, but it may not work in all environments.</p>
-              <div className="mt-2 bg-blue-50 p-3 border border-blue-100 rounded text-blue-800">
-                <p className="text-xs font-medium">Alternative solutions:</p>
-                <ul className="text-xs list-disc pl-4 mt-1">
-                  <li>Try using a different browser</li>
-                  <li>Try a browser extension that disables CORS for testing purposes</li>
-                  <li>Consider implementing a server-side proxy for this application</li>
-                </ul>
+              <p className="text-xs mb-2">We're now using a secure server-side approach that should resolve this issue. Please try again.</p>
+              <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                <Button 
+                  onClick={analyzeCV} 
+                  variant="default"
+                  size="sm"
+                >
+                  Try Again
+                </Button>
               </div>
             </div>
           ) : isNetworkError ? (
@@ -226,10 +251,10 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                 <Wifi className="h-4 w-4 flex-shrink-0" />
                 <p className="font-medium">Network Issue Detected</p>
               </div>
-              <p>There seems to be a problem connecting to the Anthropic API. Please check your internet connection and try again.</p>
+              <p>There seems to be a problem connecting to the AI service. The application has been updated to use a more reliable approach.</p>
               {retryCount > 1 && (
                 <p className="mt-2 text-xs">
-                  If this issue persists after multiple attempts, it may be a temporary problem with the Anthropic API servers or CORS restrictions.
+                  If this issue persists after multiple attempts, it may be a temporary problem with the API servers.
                 </p>
               )}
             </div>
@@ -239,7 +264,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                 <Info className="h-4 w-4 flex-shrink-0" />
                 <p className="font-medium">Rate Limit Exceeded</p>
               </div>
-              <p>You've sent too many requests to the Anthropic API in a short time. Please wait a moment before trying again.</p>
+              <p>You've sent too many requests to the AI service in a short time. Please wait a moment before trying again.</p>
             </div>
           ) : (
             <p className="text-sm text-gray-600 mb-4">
@@ -330,4 +355,3 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
 };
 
 export default CVAnalyzer;
-

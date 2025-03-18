@@ -1,6 +1,7 @@
 
 import { AIService } from './AIService';
 import { toast } from 'sonner';
+import { supabase } from "@/integrations/supabase/client";
 
 export class AnthropicAPI {
   /**
@@ -57,123 +58,90 @@ export class AnthropicAPI {
         const maxRetries = 2;
         let lastError: Error | null = null;
         
-        // Use a CORS proxy to avoid CORS issues
-        // We'll try several approaches and use the first one that works
-        const corsProxies = [
-          {
-            name: "CORS Proxy Service",
-            url: "https://corsproxy.io/",
-            endpoint: (apiUrl: string) => `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
-            headers: (apiKey: string) => ({
-              'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01'
-            })
-          },
-          {
-            name: "CORS Anywhere Fallback",
-            url: "https://cors-anywhere.herokuapp.com/",
-            endpoint: (apiUrl: string) => `https://cors-anywhere.herokuapp.com/${apiUrl}`,
-            headers: (apiKey: string) => ({
-              'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01'
-            })
-          },
-          {
-            name: "No CORS Mode (Limited)",
-            url: "https://api.anthropic.com",
-            endpoint: (apiUrl: string) => apiUrl,
-            headers: (apiKey: string) => ({
-              'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01'
-            }),
-            mode: 'no-cors' as RequestMode
-          }
-        ];
-        
+        // First try using the Supabase Edge Function to avoid CORS issues
         while (retries <= maxRetries) {
           try {
             if (retries > 0) {
               console.log(`Retry attempt ${retries}/${maxRetries}`);
             }
             
-            // Choose a proxy based on retry count
-            const proxyIndex = Math.min(retries, corsProxies.length - 1);
-            const proxy = corsProxies[proxyIndex];
-            console.log(`Trying ${proxy.name} approach...`);
+            console.log("Calling Anthropic API through Edge Function proxy...");
             
-            const apiUrl = 'https://api.anthropic.com/v1/messages';
-            const fetchOptions: RequestInit = {
-              method: 'POST',
-              headers: proxy.headers(finalApiKey),
-              body: JSON.stringify({
-                model: 'claude-3-sonnet-20240229',
-                max_tokens: maxTokens,
-                messages: messages
-              }),
-              signal: controller.signal
-            };
-            
-            // Add mode if specified
-            if (proxy.mode) {
-              fetchOptions.mode = proxy.mode;
-            }
-            
-            const response = await fetch(proxy.endpoint(apiUrl), fetchOptions);
-            
-            // Clear the timeout since we got a response
-            clearTimeout(timeoutId);
-            
-            // For no-cors mode, we can't access response details
-            if (proxy.mode === 'no-cors') {
-              console.log("Using no-cors mode, limited response data available");
-              // We have to assume response is successful and create a placeholder
-              // This is not ideal but may work for simple use cases
-              return {
-                content: [
-                  {
-                    text: "Due to CORS limitations, we've had to use a limited connection mode. " +
-                          "Please consider an alternative approach or contact support for assistance."
+            // 1. Try the Supabase Edge Function approach
+            try {
+              const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
+                body: {
+                  model: 'claude-3-sonnet-20240229',
+                  max_tokens: maxTokens,
+                  messages: messages
+                }
+              });
+              
+              // Clear the timeout since we got a response
+              clearTimeout(timeoutId);
+              
+              if (error) {
+                console.error("Edge function error:", error);
+                throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
+              }
+              
+              if (data.error) {
+                console.error("Anthropic API error via Edge Function:", data.error);
+                throw new Error(`Anthropic API error: ${data.error.message || JSON.stringify(data.error)}`);
+              }
+              
+              console.log("Anthropic API call completed successfully via Edge Function");
+              return data;
+            } catch (edgeFunctionError) {
+              console.error("Failed to use Edge Function, falling back to direct API call:", edgeFunctionError);
+              
+              // 2. Try direct API call with API key as a fallback approach (will still have CORS issues in browser)
+              // Only attempt this in development environment where CORS might be disabled
+              if (import.meta.env.DEV) {
+                console.log("Attempting direct API call (dev environment only)...");
+                
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': finalApiKey,
+                    'anthropic-version': '2023-06-01'
+                  },
+                  body: JSON.stringify({
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: maxTokens,
+                    messages: messages
+                  }),
+                  signal: controller.signal
+                });
+                
+                // Clear the timeout since we got a response
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  let errorData;
+                  
+                  try {
+                    errorData = JSON.parse(errorText);
+                  } catch (e) {
+                    errorData = { error: { message: errorText || response.statusText } };
                   }
-                ]
-              };
+                  
+                  const errorMessage = errorData.error?.message || response.statusText;
+                  console.error('Anthropic API error response:', errorData);
+                  console.error('Status code:', response.status);
+                  
+                  throw new Error(`Anthropic API error (${response.status}): ${errorMessage}`);
+                }
+                
+                const data = await response.json();
+                console.log("Anthropic API call completed successfully");
+                return data;
+              } else {
+                throw new Error("Edge Function failed and direct API calls are not supported in production due to CORS restrictions. Please ensure the Edge Function is deployed correctly.");
+              }
             }
-            
-            // Check if the response is ok (status in the range 200-299)
-            if (!response.ok) {
-              // Try to parse the error response as JSON
-              const errorText = await response.text();
-              let errorData;
-              
-              try {
-                errorData = JSON.parse(errorText);
-              } catch (e) {
-                errorData = { error: { message: errorText || response.statusText } };
-              }
-              
-              const errorMessage = errorData.error?.message || response.statusText;
-              console.error('Anthropic API error response:', errorData);
-              console.error('Status code:', response.status);
-              
-              // Handle rate limits differently
-              if (response.status === 429) {
-                throw new Error(`Anthropic API rate limit exceeded. Please try again in a few moments.`);
-              }
-              
-              // Handle authentication issues
-              if (response.status === 401 || response.status === 403) {
-                throw new Error(`Anthropic API authentication error (${response.status}): ${errorMessage}. Please check your API key in Settings.`);
-              }
-              
-              throw new Error(`Anthropic API error (${response.status}): ${errorMessage}`);
-            }
-            
-            // Parse and return the response JSON
-            const data = await response.json();
-            console.log("Anthropic API call completed successfully");
-            return data;
           } catch (fetchAttemptError) {
             lastError = fetchAttemptError as Error;
             
@@ -219,7 +187,7 @@ export class AnthropicAPI {
         // Check for network-related errors
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
           console.error('Network error when calling Anthropic API:', fetchError);
-          throw new Error('CORS issue detected when calling Anthropic API. The application is using a proxy to work around CORS limitations. Please try again or contact support if the issue persists.');
+          throw new Error('Network issue detected when calling Anthropic API. The application is now using a server-side approach to work around CORS limitations. Please try again.');
         }
         
         // Re-throw the error for other types of errors
