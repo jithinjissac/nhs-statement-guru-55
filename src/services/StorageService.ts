@@ -34,7 +34,11 @@ export class StorageService {
           title: guideline.title,
           content: guideline.content,
           created_at: guideline.dateAdded ? new Date(guideline.dateAdded) : new Date(),
-          updated_at: new Date()
+          updated_at: new Date(),
+          // Adding required fields
+          created_by: guideline.id, // This is a workaround as we don't have auth yet
+          file_name: null,
+          file_url: null
         });
       
       if (error) throw error;
@@ -94,15 +98,17 @@ export class StorageService {
         sample.id = uuidv4();
       }
       
+      // We need to create a new object that matches the table schema
       const { error } = await supabase
         .from('sample_statements')
         .upsert({
           id: sample.id,
           title: sample.title,
           content: sample.content,
-          category: sample.category,
+          // Adding required fields - note that category is not in the schema so we handle it differently
           created_at: sample.dateAdded ? new Date(sample.dateAdded) : new Date(),
-          updated_at: new Date()
+          updated_at: new Date(),
+          created_by: sample.id // This is a workaround as we don't have auth yet
         });
       
       if (error) throw error;
@@ -128,7 +134,7 @@ export class StorageService {
         id: item.id,
         title: item.title,
         content: item.content,
-        category: item.category || 'general',
+        category: 'general', // Since category doesn't exist in the table, we set a default
         dateAdded: item.created_at
       }));
     } catch (error) {

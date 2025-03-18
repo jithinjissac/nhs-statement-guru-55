@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +28,10 @@ const AdminSettings: React.FC = () => {
     enableAIDetection: true,
     enableRealTimePreview: true,
   });
+
+  // Stats for system status card
+  const [guidelinesCount, setGuidelinesCount] = useState(0);
+  const [sampleStatementsCount, setSampleStatementsCount] = useState(0);
   
   // Load saved settings on mount
   useEffect(() => {
@@ -77,6 +80,21 @@ const AdminSettings: React.FC = () => {
         });
       }
     }
+
+    // Load counts for system status
+    const loadCounts = async () => {
+      try {
+        const guidelines = await StorageService.getGuidelines();
+        setGuidelinesCount(guidelines.length);
+
+        const sampleStatements = await StorageService.getSampleStatements();
+        setSampleStatementsCount(sampleStatements.length);
+      } catch (error) {
+        console.error('Error loading counts:', error);
+      }
+    };
+
+    loadCounts();
   }, []);
   
   // Save all settings
@@ -404,11 +422,11 @@ const AdminSettings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4 pt-2">
                   <div>
                     <p className="text-sm font-medium">Guidelines</p>
-                    <p className="text-2xl font-bold">{StorageService.getGuidelines().length}</p>
+                    <p className="text-2xl font-bold">{guidelinesCount}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">Sample Statements</p>
-                    <p className="text-2xl font-bold">{StorageService.getSampleStatements().length}</p>
+                    <p className="text-2xl font-bold">{sampleStatementsCount}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">Enabled Models</p>
