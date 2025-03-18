@@ -16,10 +16,11 @@ export type CVAnalysisResult = {
     administrative: string[];
     yearsOfExperience: number;
   };
-  matchedRequirements: {requirement: string, evidence: string}[];
+  matchedRequirements: {requirement: string, evidence: string, keywords: string[]}[];
   missingRequirements: string[];
   recommendedHighlights: string[];
   nhsValues: string[];
+  education: string[];
 };
 
 export class AIService {
@@ -117,66 +118,157 @@ export class AIService {
   }
   
   /**
-   * Extracts skills from CV text
+   * Extracts skills from CV text using AI-based identification
    */
   private static extractSkills(cvText: string): string[] {
-    // Don't rely on hardcoded lists, use AI-based identification
-    const commonSkills = [
-      'patient assessment', 'healthcare record', 'team collaboration', 
-      'medication administration', 'crisis management', 'patient care',
-      'clinical decision', 'leadership', 'communication', 'time management',
-      'electronic health records', 'infection control', 'quality improvement',
-      'care planning', 'risk assessment', 'patient advocacy', 'emergency response',
-      'mentoring', 'critical thinking', 'resource allocation', 'conflict resolution',
-      'documentation', 'research', 'training', 'patient education', 'teamwork'
-    ];
-    
-    // Extract skills using more advanced text analysis
-    const extractedSkills: string[] = [];
+    const extractedSkills: Set<string> = new Set();
     const sentences = cvText.split(/[.!?]+/);
     
-    // Look for skill phrases in context
+    // Skill indicator phrases
+    const skillIndicators = [
+      'skill', 'proficient', 'experienced in', 'trained in', 'responsible for',
+      'expert in', 'knowledge of', 'competent in', 'familiar with', 'capable of',
+      'qualified in', 'specializing in', 'certified in', 'practiced in'
+    ];
+    
+    // Analyze each sentence for skill mentions
     for (const sentence of sentences) {
       const sentenceLower = sentence.toLowerCase().trim();
       
-      // Check for skill indicators
-      if (sentenceLower.includes('skill') || 
-          sentenceLower.includes('proficient') || 
-          sentenceLower.includes('experienced in') ||
-          sentenceLower.includes('trained in') ||
-          sentenceLower.includes('responsible for')) {
+      // Check if sentence contains skill indicators
+      const hasSkillIndicator = skillIndicators.some(indicator => 
+        sentenceLower.includes(indicator)
+      );
+      
+      if (hasSkillIndicator || 
+          sentenceLower.includes('skill') || 
+          sentenceLower.includes('ability')) {
         
-        // Extract skill from this sentence
-        for (const skill of commonSkills) {
-          if (sentenceLower.includes(skill)) {
-            const formattedSkill = skill
-              .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(' ');
-            
-            if (!extractedSkills.includes(formattedSkill)) {
-              extractedSkills.push(formattedSkill);
+        // Extract potential skills (phrases of 2-4 words)
+        const words = sentence.split(/\s+/);
+        for (let i = 0; i < words.length; i++) {
+          // Extract 2-word phrases
+          if (i + 1 < words.length) {
+            const skill = `${words[i]} ${words[i+1]}`.replace(/[,.;:()]/g, '');
+            if (skill.length > 5 && /[A-Z]/.test(skill[0])) {
+              extractedSkills.add(skill);
+            }
+          }
+          
+          // Extract 3-word phrases
+          if (i + 2 < words.length) {
+            const skill = `${words[i]} ${words[i+1]} ${words[i+2]}`.replace(/[,.;:()]/g, '');
+            if (skill.length > 8 && /[A-Z]/.test(skill[0])) {
+              extractedSkills.add(skill);
             }
           }
         }
       }
     }
     
-    // Also check for direct mentions of skills
-    for (const skill of commonSkills) {
-      if (cvText.toLowerCase().includes(skill.toLowerCase())) {
-        const formattedSkill = skill
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
-        if (!extractedSkills.includes(formattedSkill)) {
-          extractedSkills.push(formattedSkill);
+    // Also look for direct skill mentions in CV sections likely to contain skills
+    const skillSectionRegex = /\b(skills|abilities|competencies|expertise|qualifications)\b/i;
+    const skillSections = cvText.split('\n\n').filter(section => 
+      skillSectionRegex.test(section.substring(0, 50))
+    );
+    
+    for (const section of skillSections) {
+      const lines = section.split('\n');
+      for (const line of lines) {
+        if (line.includes('•') || line.includes('-') || /^\s*\d+\./.test(line)) {
+          const skill = line.replace(/^[\s•\-\d.]+/, '').trim();
+          if (skill.length > 3) {
+            extractedSkills.add(skill);
+          }
         }
       }
     }
     
-    return extractedSkills;
+    // Convert set to array and limit to most relevant skills (shorter phrases are often more accurate)
+    return Array.from(extractedSkills)
+      .sort((a, b) => a.length - b.length)
+      .slice(0, 15)
+      .map(skill => skill.trim());
+  }
+  
+  /**
+   * Extracts education qualifications from CV
+   */
+  private static extractEducation(cvText: string): string[] {
+    const education: string[] = [];
+    const lines = cvText.split('\n');
+    let inEducationSection = false;
+    
+    // Common education section headers
+    const educationHeaders = [
+      'education', 'qualifications', 'academic', 'educational background', 
+      'academic qualifications', 'academic background', 'degrees'
+    ];
+    
+    // Common degree and qualification names
+    const degreeKeywords = [
+      'degree', 'bachelor', 'master', 'phd', 'diploma', 'certificate', 
+      'graduation', 'msc', 'bsc', 'ba', 'ma', 'md', 'mbbs', 'nursing',
+      'nmc', 'registered', 'qualification', 'certified', 'license'
+    ];
+    
+    // Look for education section
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim().toLowerCase();
+      
+      // Check if we're entering an education section
+      if (!inEducationSection) {
+        for (const header of educationHeaders) {
+          if (line.includes(header) && line.length < 50) {
+            inEducationSection = true;
+            break;
+          }
+        }
+      }
+      
+      // Check if we're leaving the education section
+      if (inEducationSection) {
+        if (line.match(/^(experience|employment|work history|career|skills|references|interests|hobbies)/i) && line.length < 50) {
+          inEducationSection = false;
+        }
+      }
+      
+      // Process lines in education section
+      if (inEducationSection && line) {
+        // Skip the section header
+        if (educationHeaders.some(header => line.includes(header) && line.length < 50)) {
+          continue;
+        }
+        
+        const hasYear = /\b(19|20)\d{2}\b/.test(line);
+        const hasDegree = degreeKeywords.some(keyword => line.includes(keyword));
+        
+        if ((hasYear || hasDegree) && line.length > 10) {
+          education.push(lines[i].trim());
+        }
+      }
+    }
+    
+    // If we didn't find a dedicated education section, look throughout the CV
+    if (education.length === 0) {
+      for (const line of lines) {
+        const lineLower = line.trim().toLowerCase();
+        const hasEducationKeyword = degreeKeywords.some(keyword => lineLower.includes(keyword));
+        const hasYear = /\b(19|20)\d{2}\b/.test(lineLower);
+        
+        if (hasEducationKeyword && hasYear && lineLower.length > 10 && lineLower.length < 100) {
+          education.push(line.trim());
+        }
+      }
+    }
+    
+    // Remove duplicates and keep entries concise
+    return [...new Set(education)].map(entry => {
+      if (entry.length > 100) {
+        return entry.substring(0, 97) + '...';
+      }
+      return entry;
+    });
   }
   
   /**
@@ -276,7 +368,7 @@ export class AIService {
   }
   
   /**
-   * Calculates approximate years of experience from CV text
+   * Calculates years of experience from date ranges in CV text
    */
   private static calculateYearsOfExperience(cvText: string): number {
     let totalYears = 0;
@@ -339,200 +431,162 @@ export class AIService {
    * Extracts experience from CV with improved identification of clinical, non-clinical, and administrative roles
    */
   private static extractExperience(cvText: string): {clinical: string[], nonClinical: string[], administrative: string[], yearsOfExperience: number} {
-    const lines = cvText.split('\n');
     const clinical: string[] = [];
     const nonClinical: string[] = [];
     const administrative: string[] = [];
     
-    let inExperienceSection = false;
-    let currentJobTitle = '';
-    let currentEmployer = '';
-    let currentDateRange = '';
-    let currentResponsibilities = '';
-    let currentType = '';
+    // Split CV by sections and paragraphs
+    const sections = cvText.split(/\n\s*\n/);
     
-    // AI-based approach to identify role types without relying only on keywords
-    const identifyRoleType = (text: string): string => {
-      const textLower = text.toLowerCase();
+    // Clinical role keywords
+    const clinicalKeywords = [
+      'nurse', 'doctor', 'medical', 'patient', 'clinical', 'care', 'health', 
+      'hospital', 'treatment', 'diagnostic', 'therapy', 'ward', 'nhs', 
+      'healthcare', 'surgery', 'clinic', 'physician', 'rehabilitation',
+      'emergency', 'maternity', 'midwife', 'pharmacist', 'radiographer'
+    ];
+    
+    // Administrative role keywords
+    const adminKeywords = [
+      'admin', 'administrative', 'office', 'clerk', 'secretary', 'coordinator', 
+      'supervisor', 'manager', 'assistant', 'receptionist', 'scheduling',
+      'documentation', 'paperwork', 'filing', 'records', 'reception'
+    ];
+    
+    // Helper function to determine experience type
+    const categorizeExperience = (text: string): string => {
+      const lowerText = text.toLowerCase();
       
-      // Clinical indicators
-      const clinicalKeywords = ['nurse', 'doctor', 'medical', 'patient', 'clinical', 'care', 'health', 'hospital', 
-        'treatment', 'diagnostic', 'therapy', 'therapeutic', 'healthcare', 'ward', 'nhs', 'care home', 'caregiver'];
+      // Count matches for each category
+      const clinicalCount = clinicalKeywords.filter(word => lowerText.includes(word)).length;
+      const adminCount = adminKeywords.filter(word => lowerText.includes(word)).length;
       
-      // Administrative indicators
-      const adminKeywords = ['admin', 'administrative', 'office', 'clerk', 'secretary', 'coordinator', 
-        'supervisor', 'manager', 'assistant', 'receptionist', 'scheduling', 'documentation'];
-      
-      // Check for clinical role
-      const clinicalScore = clinicalKeywords.filter(word => textLower.includes(word)).length;
-      
-      // Check for administrative role
-      const adminScore = adminKeywords.filter(word => textLower.includes(word)).length;
-      
-      // Determine role type based on keyword matches
-      if (clinicalScore > adminScore && clinicalScore > 0) {
+      // Determine the category based on keyword density
+      if (clinicalCount > adminCount && clinicalCount > 0) {
         return 'clinical';
-      } else if (adminScore > 0) {
+      } else if (adminCount > 0) {
         return 'administrative';
-      } else if (textLower.includes('experience') || 
-                textLower.includes('work') || 
-                textLower.includes('job') || 
-                textLower.includes('position') ||
-                textLower.includes('role')) {
+      } else if (lowerText.includes('experience') || 
+                 lowerText.includes('work') ||
+                 lowerText.includes('job') ||
+                 lowerText.includes('position') ||
+                 lowerText.includes('role')) {
         return 'nonClinical';
       }
       
       return '';
     };
     
-    // Function to process completed job entry
-    const processJobEntry = () => {
-      if (currentJobTitle || currentEmployer) {
-        // Create a concise single-line summary
-        let experience = '';
-        
-        if (currentJobTitle && currentEmployer) {
-          experience = `${currentJobTitle} at ${currentEmployer}`;
-        } else if (currentJobTitle) {
-          experience = currentJobTitle;
-        } else if (currentEmployer) {
-          experience = `Position at ${currentEmployer}`;
-        }
-        
-        if (currentDateRange) {
-          experience += ` (${currentDateRange})`;
-        }
-        
-        // Add a brief description if available
-        if (currentResponsibilities) {
-          // Only take the first sentence or truncate if too long
-          let description = currentResponsibilities.split('.')[0].trim();
-          if (description.length > 100) {
-            description = description.substring(0, 100) + '...';
-          }
-          experience += `: ${description}`;
-        }
-        
-        // Skip if empty
-        if (experience.trim().length > 0) {
-          // Determine category if not already set
-          if (!currentType) {
-            currentType = identifyRoleType(currentJobTitle + ' ' + currentEmployer + ' ' + currentResponsibilities);
-          }
-          
-          // Add to appropriate list
-          switch (currentType) {
-            case 'clinical':
-              clinical.push(experience);
-              break;
-            case 'administrative':
-              administrative.push(experience);
-              break;
-            case 'nonClinical':
-              nonClinical.push(experience);
-              break;
-          }
-        }
-      }
-      
-      // Reset for next entry
-      currentJobTitle = '';
-      currentEmployer = '';
-      currentDateRange = '';
-      currentResponsibilities = '';
-      currentType = '';
-    };
+    // Find experience section
+    const experienceSections = sections.filter(section => 
+      /^(?:experience|employment|work history|career|professional background)/i.test(section.split('\n')[0] || '')
+    );
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      // Check if we're entering an experience section
-      if (/experience|employment|work history|professional background|career|professional experience/i.test(line) &&
-          line.length < 50) {
-        inExperienceSection = true;
-        continue;
-      }
-      
-      // Check if we're leaving an experience section
-      if (inExperienceSection && /education|qualifications|skills|references|personal profile|interests|hobbies/i.test(line) &&
-          line.length < 50) {
-        // Process any pending job entry
-        processJobEntry();
-        inExperienceSection = false;
-        continue;
-      }
-      
-      // Process experience entries
-      if (inExperienceSection && line.length > 0) {
-        // Check for date ranges which often indicate start of new experience
-        const hasDateRange = /\d{4}\s*[-–—]\s*\d{4}|\d{4}\s*[-–—]\s*(present|current|now)/i.test(line) || 
-                           /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\s*[-–—]/i.test(line);
-                           
-        // Check for job title patterns (often has capital letters or followed by "at")
-        const isJobTitle = /^[A-Z][a-z]+ [A-Z][a-z]+|^[A-Z][a-z]+$/.test(line) || 
-                           line.includes(' at ') || 
-                           /manager|assistant|coordinator|director|supervisor|officer/i.test(line);
+    if (experienceSections.length > 0) {
+      // Process each experience section
+      for (const section of experienceSections) {
+        // Split into individual job entries (look for date patterns as separators)
+        const jobEntries = section.split(/\n(?=(?:\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}))/i);
         
-        if (hasDateRange) {
-          // If we already have info, process the previous entry before starting a new one
-          if (currentJobTitle || currentEmployer) {
-            processJobEntry();
-          }
+        for (let i = 1; i < jobEntries.length; i++) { // Skip the header
+          const entry = jobEntries[i].trim();
           
-          currentDateRange = line;
+          if (entry.length < 10) continue; // Skip too short entries
           
-          // Try to identify job title and employer from the same line
-          const parts = line.split(/[-–—]/)[0].trim().split(/at|with|for/i);
-          if (parts.length > 1) {
-            currentJobTitle = parts[0].trim();
-            currentEmployer = parts[1].trim();
-          }
+          // Extract just the job title and employer if possible
+          const lines = entry.split('\n');
+          let jobSummary = '';
           
-          // Check next line for potential job title if not identified
-          if (!currentJobTitle && i+1 < lines.length && lines[i+1].trim().length > 0) {
-            const nextLine = lines[i+1].trim();
-            if (!/\d{4}/.test(nextLine)) { // Ensure it's not another date
-              currentJobTitle = nextLine;
-              i++; // Skip this line in next iteration
+          // Look for the job title and employer in the first 3 lines
+          for (let j = 0; j < Math.min(3, lines.length); j++) {
+            if (lines[j].length > 5 && !/^\s*[\-•]/.test(lines[j])) {
+              jobSummary = lines[j];
+              break;
             }
           }
           
-          // Identify role type from what we have so far
-          currentType = identifyRoleType(currentJobTitle + ' ' + currentEmployer + ' ' + currentDateRange);
-        } 
-        else if (isJobTitle && !currentJobTitle) {
-          currentJobTitle = line;
-          
-          // Check if employer is mentioned in the same line
-          if (line.includes(' at ')) {
-            const parts = line.split(/ at | with | for /i);
-            if (parts.length > 1) {
-              currentJobTitle = parts[0].trim();
-              currentEmployer = parts[1].trim();
-            }
+          // If we couldn't find a good summary, use the first line
+          if (!jobSummary && lines.length > 0) {
+            jobSummary = lines[0];
           }
           
-          // Identify role type from what we have so far
-          currentType = identifyRoleType(currentJobTitle + ' ' + currentEmployer);
+          // Make sure it's not too long
+          if (jobSummary.length > 100) {
+            jobSummary = jobSummary.substring(0, 97) + '...';
+          }
+          
+          // Categorize the experience
+          const category = categorizeExperience(entry);
+          
+          // Add to appropriate category
+          if (category === 'clinical') {
+            clinical.push(jobSummary);
+          } else if (category === 'administrative') {
+            administrative.push(jobSummary);
+          } else if (category === 'nonClinical') {
+            nonClinical.push(jobSummary);
+          }
         }
-        else if (currentJobTitle || currentEmployer) {
-          // Collect responsibilities/descriptions for current job
-          if (currentResponsibilities) {
-            currentResponsibilities += ' ' + line;
-          } else {
-            currentResponsibilities = line;
+      }
+    } else {
+      // Fallback: Try to extract experience without clear section headers
+      // Look for date patterns that might indicate job entries
+      const lines = cvText.split('\n');
+      let currentJob = '';
+      let currentEntry = '';
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Look for date ranges that might indicate start of job entries
+        if (/(?:\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})\s*[-–—]\s*(?:\d{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}|present|current)/i.test(line)) {
+          // Save previous job if exists
+          if (currentJob && currentEntry) {
+            const category = categorizeExperience(currentEntry);
+            
+            if (category === 'clinical') {
+              clinical.push(currentJob);
+            } else if (category === 'administrative') {
+              administrative.push(currentJob);
+            } else if (category === 'nonClinical') {
+              nonClinical.push(currentJob);
+            }
           }
           
-          // If we have a responsibility description, refine our role type
-          if (!currentType && currentResponsibilities) {
-            currentType = identifyRoleType(currentJobTitle + ' ' + currentEmployer + ' ' + currentResponsibilities);
+          // Start new job
+          currentJob = line;
+          currentEntry = line;
+          
+          // Add job title if on next line
+          if (i + 1 < lines.length && lines[i + 1].trim().length > 0 && 
+              !/^\s*[\-•]/.test(lines[i + 1]) && !/\d{4}[-–—]/.test(lines[i + 1])) {
+            currentJob += ' - ' + lines[i + 1].trim();
+            i++; // Skip next line as we've processed it
           }
+          
+          // Make sure it's not too long
+          if (currentJob.length > 100) {
+            currentJob = currentJob.substring(0, 97) + '...';
+          }
+        } else if (currentEntry) {
+          // Add to current entry for categorization purposes
+          currentEntry += ' ' + line;
+        }
+      }
+      
+      // Add last job if exists
+      if (currentJob && currentEntry) {
+        const category = categorizeExperience(currentEntry);
+        
+        if (category === 'clinical') {
+          clinical.push(currentJob);
+        } else if (category === 'administrative') {
+          administrative.push(currentJob);
+        } else if (category === 'nonClinical') {
+          nonClinical.push(currentJob);
         }
       }
     }
-    
-    // Process the last job entry if any
-    processJobEntry();
     
     // Calculate years of experience
     const yearsOfExperience = this.calculateYearsOfExperience(cvText);
@@ -546,7 +600,94 @@ export class AIService {
   }
   
   /**
-   * Analyzes CV against job requirements to identify matches and gaps, including matching keywords
+   * Matches requirements against CV content with improved evidence extraction
+   */
+  private static matchRequirements(
+    requirements: string[],
+    cv: string,
+    additionalExperience: string
+  ): { 
+    matchedRequirements: {requirement: string, evidence: string, keywords: string[]}[],
+    missingRequirements: string[]
+  } {
+    const fullCV = additionalExperience ? `${cv}\n\nAdditional Experience:\n${additionalExperience}` : cv;
+    const matchedRequirements: {requirement: string, evidence: string, keywords: string[]}[] = [];
+    const missingRequirements: string[] = [];
+    
+    for (const req of requirements) {
+      // Extract the actual requirement text without the [Essential]/[Desirable] prefix
+      const reqTextOnly = req.replace(/^\[(Essential|Desirable)\]\s+/, '');
+      const reqLower = reqTextOnly.toLowerCase();
+      const fullCVLower = fullCV.toLowerCase();
+      
+      // Break the requirement into significant words (more than 3 chars)
+      const reqWords = reqLower.split(/\s+/).filter(word => word.length > 3);
+      const matchedWords: string[] = [];
+      
+      // Skip common words
+      const commonWords = ['with', 'this', 'that', 'have', 'from', 'were', 'what', 'when', 'where', 'which', 'their', 'there', 'these', 'those', 'will', 'should', 'could', 'would', 'able'];
+      const filteredReqWords = reqWords.filter(word => !commonWords.includes(word));
+      
+      // Check for keyword matches
+      for (const reqWord of filteredReqWords) {
+        if (fullCVLower.includes(reqWord)) {
+          matchedWords.push(reqWord);
+        }
+      }
+      
+      // Consider it a match if at least 2 significant words match
+      if (matchedWords.length >= 2) {
+        // Find a relevant sentence from CV as evidence
+        const sentences = fullCV.match(/[^.!?]+[.!?]+/g) || [];
+        let bestEvidence = '';
+        let bestMatchCount = 0;
+        
+        for (const sentence of sentences) {
+          const sentenceLower = sentence.toLowerCase();
+          let sentenceMatchCount = 0;
+          
+          for (const word of matchedWords) {
+            if (sentenceLower.includes(word)) {
+              sentenceMatchCount++;
+            }
+          }
+          
+          if (sentenceMatchCount > bestMatchCount) {
+            bestMatchCount = sentenceMatchCount;
+            bestEvidence = sentence.trim();
+            
+            // If we found a sentence with most of the keywords, stop searching
+            if (sentenceMatchCount >= matchedWords.length * 0.7) {
+              break;
+            }
+          }
+        }
+        
+        // Simplify and shorten the evidence
+        if (bestEvidence) {
+          if (bestEvidence.length > 100) {
+            bestEvidence = bestEvidence.substring(0, 97) + '...';
+          }
+        } else {
+          // Fallback if no sentence found
+          bestEvidence = `Matches keywords: ${matchedWords.join(', ')}`;
+        }
+        
+        matchedRequirements.push({
+          requirement: req,
+          evidence: bestEvidence,
+          keywords: matchedWords
+        });
+      } else {
+        missingRequirements.push(req);
+      }
+    }
+    
+    return { matchedRequirements, missingRequirements };
+  }
+  
+  /**
+   * Analyzes CV against job requirements with improved matching
    */
   static async analyzeCV(
     cv: string,
@@ -564,103 +705,14 @@ export class AIService {
     const experience = this.extractExperience(fullCV);
     const requirements = this.extractRequirements(jobDescription);
     const nhsValues = this.extractNHSValues(jobDescription);
+    const education = this.extractEducation(fullCV);
     
-    // Match requirements against CV content with evidence
-    const matchedRequirements: {requirement: string, evidence: string}[] = [];
-    const missingRequirements: string[] = [];
+    // Match requirements against CV
+    const { matchedRequirements, missingRequirements } = this.matchRequirements(
+      requirements, cv, additionalExperience
+    );
     
-    for (const req of requirements) {
-      let found = false;
-      let evidence = '';
-      let matchCount = 0;
-      
-      // Extract the actual requirement text without the [Essential]/[Desirable] prefix
-      const reqTextOnly = req.replace(/^\[(Essential|Desirable)\]\s+/, '');
-      const reqLower = reqTextOnly.toLowerCase();
-      const fullCVLower = fullCV.toLowerCase();
-      
-      // Break the requirement into significant words (more than 4 chars)
-      const reqWords = reqLower.split(/\s+/).filter(word => word.length > 4);
-      const matchedWords: string[] = [];
-      
-      // Check for multiple keyword matches
-      for (const reqWord of reqWords) {
-        // Skip common words and short words
-        if (['with', 'this', 'that', 'have', 'from', 'were', 'what', 'when', 'where', 'which', 'their'].includes(reqWord)) {
-          continue;
-        }
-        
-        if (fullCVLower.includes(reqWord)) {
-          matchCount++;
-          matchedWords.push(reqWord);
-        }
-      }
-      
-      // Consider it a match if at least 2 significant words match or 30% of words match
-      if (matchCount >= 2 || (reqWords.length > 0 && matchCount / reqWords.length >= 0.3)) {
-        found = true;
-        evidence = `Matches keywords: ${matchedWords.join(', ')}`;
-        
-        // Try to find a sentence that contains multiple match words for better evidence
-        const sentences = fullCV.match(/[^.!?]+[.!?]+/g) || [];
-        for (const sentence of sentences) {
-          const sentenceLower = sentence.toLowerCase();
-          let sentenceMatchCount = 0;
-          
-          for (const word of matchedWords) {
-            if (sentenceLower.includes(word)) {
-              sentenceMatchCount++;
-            }
-          }
-          
-          if (sentenceMatchCount >= 2) {
-            // Simplify the evidence sentence
-            let simplifiedSentence = sentence.trim();
-            if (simplifiedSentence.length > 100) {
-              simplifiedSentence = simplifiedSentence.substring(0, 100) + '...';
-            }
-            evidence = simplifiedSentence;
-            break;
-          }
-        }
-      }
-      
-      // Also check against extracted skills
-      if (!found) {
-        for (const skill of skills) {
-          if (reqLower.includes(skill.toLowerCase())) {
-            found = true;
-            evidence = `Has skill: ${skill}`;
-            break;
-          }
-        }
-      }
-      
-      // Check against extracted experiences
-      if (!found) {
-        const allExperiences = [
-          ...experience.clinical, 
-          ...experience.nonClinical, 
-          ...experience.administrative
-        ];
-        
-        for (const exp of allExperiences) {
-          if (exp.toLowerCase().includes(reqLower)) {
-            found = true;
-            evidence = `Experience: ${exp}`;
-            break;
-          }
-        }
-      }
-      
-      if (found) {
-        matchedRequirements.push({requirement: req, evidence: evidence || 'Found in CV'});
-      } else {
-        missingRequirements.push(req);
-      }
-    }
-    
-    // Generate recommended highlights based on matched requirements and NHS values
+    // Generate recommended highlights
     const recommendedHighlights = this.generateRecommendedHighlights(
       matchedRequirements.map(item => item.requirement), 
       nhsValues, 
@@ -675,10 +727,11 @@ export class AIService {
         administrative: experience.administrative,
         yearsOfExperience: experience.yearsOfExperience
       },
-      matchedRequirements: matchedRequirements,
+      matchedRequirements,
       missingRequirements,
       recommendedHighlights,
-      nhsValues
+      nhsValues,
+      education
     };
   }
   

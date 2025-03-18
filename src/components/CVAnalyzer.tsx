@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, AlertCircle, ArrowRight, Loader2, Users } from 'lucide-react';
+import { CheckCircle, AlertCircle, ArrowRight, Loader2, Users, BookOpen, Briefcase } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { AIService, CVAnalysisResult } from '@/services/AIService';
 import { toast } from 'sonner';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface CVAnalyzerProps {
   cv: string;
@@ -173,8 +174,28 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                           </div>
                         </div>
                         
+                        {/* Education Section */}
                         <div className="space-y-2">
-                          <h5 className="text-sm font-medium">Clinical Experience</h5>
+                          <h5 className="text-sm font-medium flex items-center gap-2">
+                            <BookOpen className="h-4 w-4 text-blue-500" />
+                            Education & Qualifications
+                          </h5>
+                          {analysis.education && analysis.education.length > 0 ? (
+                            <ul className="text-sm space-y-1 list-disc pl-5">
+                              {analysis.education.map((edu, index) => (
+                                <li key={index}>{edu}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No specific education details detected in your CV</p>
+                          )}
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <h5 className="text-sm font-medium flex items-center gap-2">
+                            <Briefcase className="h-4 w-4 text-blue-500" />
+                            Clinical Experience
+                          </h5>
                           {analysis.relevantExperience.clinical.length > 0 ? (
                             <ul className="text-sm space-y-1 list-disc pl-5">
                               {analysis.relevantExperience.clinical.map((exp, index) => (
@@ -187,7 +208,10 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                         </div>
 
                         <div className="space-y-2">
-                          <h5 className="text-sm font-medium">Administrative Experience</h5>
+                          <h5 className="text-sm font-medium flex items-center gap-2">
+                            <Briefcase className="h-4 w-4 text-blue-500" />
+                            Administrative Experience
+                          </h5>
                           {analysis.relevantExperience.administrative?.length > 0 ? (
                             <ul className="text-sm space-y-1 list-disc pl-5">
                               {analysis.relevantExperience.administrative.map((exp, index) => (
@@ -200,7 +224,10 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                         </div>
 
                         <div className="space-y-2">
-                          <h5 className="text-sm font-medium">Other Non-Clinical Experience</h5>
+                          <h5 className="text-sm font-medium flex items-center gap-2">
+                            <Briefcase className="h-4 w-4 text-blue-500" />
+                            Other Non-Clinical Experience
+                          </h5>
                           {analysis.relevantExperience.nonClinical.length > 0 ? (
                             <ul className="text-sm space-y-1 list-disc pl-5">
                               {analysis.relevantExperience.nonClinical.map((exp, index) => (
@@ -224,45 +251,74 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                       </CardHeader>
                       <CardContent>
                         {(analysis.matchedRequirements.length > 0 || analysis.missingRequirements.length > 0) ? (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-1/2">Requirement</TableHead>
-                                <TableHead className="w-1/3">Evidence</TableHead>
-                                <TableHead className="w-1/6">Status</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {analysis.matchedRequirements.map((req, index) => (
-                                <TableRow key={`matched-${index}`}>
-                                  <TableCell className="align-top">{req.requirement}</TableCell>
-                                  <TableCell className="align-top text-sm">
-                                    {req.evidence}
-                                  </TableCell>
-                                  <TableCell className="align-top">
-                                    <div className="flex items-center">
-                                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                                      <span className="text-green-600 dark:text-green-400">Matched</span>
-                                    </div>
-                                  </TableCell>
+                          <ScrollArea className="h-[400px] pr-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-[40%]">Requirement</TableHead>
+                                  <TableHead className="w-[50%]">Evidence</TableHead>
+                                  <TableHead className="w-[10%]">Status</TableHead>
                                 </TableRow>
-                              ))}
-                              {analysis.missingRequirements.map((req, index) => (
-                                <TableRow key={`missing-${index}`}>
-                                  <TableCell className="align-top">{req}</TableCell>
-                                  <TableCell className="align-top text-sm text-muted-foreground">
-                                    No matching evidence found
-                                  </TableCell>
-                                  <TableCell className="align-top">
-                                    <div className="flex items-center">
-                                      <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
-                                      <span className="text-amber-600 dark:text-amber-400">Missing</span>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {analysis.matchedRequirements.map((req, index) => (
+                                  <TableRow key={`matched-${index}`}>
+                                    <TableCell className="align-top">
+                                      {req.requirement.replace(/^\[(Essential|Desirable)\]\s+/, (match) => (
+                                        <span className={match.includes('Essential') ? 
+                                          'text-red-600 dark:text-red-400 font-medium' : 
+                                          'text-amber-600 dark:text-amber-400'
+                                        }>
+                                          {match}
+                                        </span>
+                                      ))}
+                                    </TableCell>
+                                    <TableCell className="align-top text-sm">
+                                      <span>{req.evidence}</span>
+                                      {req.keywords && req.keywords.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {req.keywords.map((keyword, kidx) => (
+                                            <Badge key={kidx} variant="outline" className="bg-blue-50 text-blue-600 text-xs dark:bg-blue-900/20 dark:text-blue-300">
+                                              {keyword}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="align-top">
+                                      <div className="flex items-center">
+                                        <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                                        <span className="text-green-600 dark:text-green-400 whitespace-nowrap">Matched</span>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {analysis.missingRequirements.map((req, index) => (
+                                  <TableRow key={`missing-${index}`}>
+                                    <TableCell className="align-top">
+                                      {req.replace(/^\[(Essential|Desirable)\]\s+/, (match) => (
+                                        <span className={match.includes('Essential') ? 
+                                          'text-red-600 dark:text-red-400 font-medium' : 
+                                          'text-amber-600 dark:text-amber-400'
+                                        }>
+                                          {match}
+                                        </span>
+                                      ))}
+                                    </TableCell>
+                                    <TableCell className="align-top text-sm text-muted-foreground">
+                                      No matching evidence found in your CV
+                                    </TableCell>
+                                    <TableCell className="align-top">
+                                      <div className="flex items-center">
+                                        <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
+                                        <span className="text-amber-600 dark:text-amber-400 whitespace-nowrap">Missing</span>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </ScrollArea>
                         ) : (
                           <p className="text-sm text-muted-foreground">No specific requirements detected in the job description</p>
                         )}
