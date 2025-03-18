@@ -76,6 +76,37 @@ export class AIService {
   }
   
   /**
+   * Call to Anthropic API for CV analysis
+   */
+  private static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': `${process.env.ANTHROPIC_API_KEY || ''}`,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: maxTokens,
+          messages: messages
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Anthropic API error: ${errorData.error?.message || response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error calling Anthropic API:', error);
+      throw error;
+    }
+  }
+  
+  /**
    * Extracts NHS values mentioned in the job description
    */
   private static extractNHSValues(jobDescription: string): string[] {
@@ -687,55 +718,6 @@ export class AIService {
   }
   
   /**
-   * Analyzes CV against job requirements with improved matching
-   */
-  static async analyzeCV(
-    cv: string,
-    jobDescription: string,
-    additionalExperience: string = ''
-  ): Promise<CVAnalysisResult> {
-    console.log("Analyzing CV with text length:", cv.length);
-    console.log("Analyzing job description with text length:", jobDescription.length);
-    
-    // Combine CV with additional experience if provided
-    const fullCV = additionalExperience ? `${cv}\n\nAdditional Experience:\n${additionalExperience}` : cv;
-    
-    // Extract data from CV and job description
-    const skills = this.extractSkills(fullCV);
-    const experience = this.extractExperience(fullCV);
-    const requirements = this.extractRequirements(jobDescription);
-    const nhsValues = this.extractNHSValues(jobDescription);
-    const education = this.extractEducation(fullCV);
-    
-    // Match requirements against CV
-    const { matchedRequirements, missingRequirements } = this.matchRequirements(
-      requirements, cv, additionalExperience
-    );
-    
-    // Generate recommended highlights
-    const recommendedHighlights = this.generateRecommendedHighlights(
-      matchedRequirements.map(item => item.requirement), 
-      nhsValues, 
-      experience
-    );
-    
-    return {
-      relevantSkills: skills,
-      relevantExperience: {
-        clinical: experience.clinical,
-        nonClinical: experience.nonClinical,
-        administrative: experience.administrative,
-        yearsOfExperience: experience.yearsOfExperience
-      },
-      matchedRequirements,
-      missingRequirements,
-      recommendedHighlights,
-      nhsValues,
-      education
-    };
-  }
-  
-  /**
    * Generate recommended highlights for the statement
    */
   private static generateRecommendedHighlights(
@@ -775,6 +757,130 @@ export class AIService {
   }
   
   /**
+   * Analyzes CV against job requirements with improved matching and progress tracking
+   */
+  static async analyzeCV(
+    cv: string,
+    jobDescription: string,
+    additionalExperience: string = '',
+    progressCallback?: (stage: string, percent: number) => void
+  ): Promise<CVAnalysisResult> {
+    console.log("Analyzing CV with text length:", cv.length);
+    console.log("Analyzing job description with text length:", jobDescription.length);
+    
+    // Update progress
+    progressCallback?.('Initializing analysis', 5);
+    
+    try {
+      // Combine CV with additional experience if provided
+      const fullCV = additionalExperience ? `${cv}\n\nAdditional Experience:\n${additionalExperience}` : cv;
+      
+      // Update progress
+      progressCallback?.('Extracting requirements', 15);
+      
+      // First extract requirements from job description so we can be more focused
+      const requirements = this.extractRequirements(jobDescription);
+      const nhsValues = this.extractNHSValues(jobDescription);
+      
+      // Update progress
+      progressCallback?.('Parsing CV structure', 25);
+      
+      // Create a prompt for Anthropic to analyze the CV and JD
+      const messages = [
+        {
+          role: "user",
+          content: `I need a detailed analysis of this CV compared against a job description.
+          
+          CURRICULUM VITAE:
+          ${fullCV}
+          
+          JOB DESCRIPTION:
+          ${jobDescription}
+          
+          EXTRACTED REQUIREMENTS FROM JOB DESCRIPTION:
+          ${requirements.join('\n')}
+          
+          I need you to extract and analyze the following:
+          1. Education & qualifications from the CV (list format)
+          2. Clinical experience from the CV (list format)
+          3. Administrative experience from the CV (list format)
+          4. Non-clinical experience from the CV (list format)
+          5. Total years of experience
+          6. Key skills from the CV (list format)
+          7. Match each requirement from the job description against content in the CV with evidence
+          8. Identify which requirements are not matched in the CV
+          
+          Format your response as a detailed JSON object with these fields:
+          {
+            "education": ["qualification 1", "qualification 2"],
+            "relevantExperience": {
+              "clinical": ["experience 1", "experience 2"],
+              "administrative": ["experience 1", "experience 2"],
+              "nonClinical": ["experience 1", "experience 2"],
+              "yearsOfExperience": 5
+            },
+            "relevantSkills": ["skill 1", "skill 2"],
+            "matchedRequirements": [
+              {"requirement": "requirement text", "evidence": "evidence from CV", "keywords": ["keyword1", "keyword2"]}
+            ],
+            "missingRequirements": ["requirement 1", "requirement 2"],
+            "recommendedHighlights": ["recommendation 1", "recommendation 2"],
+            "nhsValues": ["value 1", "value 2"]
+          }
+          
+          Return ONLY the JSON. No explanatory text.`
+        }
+      ];
+      
+      // Update progress
+      progressCallback?.('Calling AI analysis', 40);
+      
+      // Call Claude API
+      const anthropicResponse = await this.callAnthropic(messages);
+      
+      // Update progress
+      progressCallback?.('Processing results', 70);
+      
+      // Parse the response content and extract the JSON
+      let responseContent = anthropicResponse.content[0].text;
+      
+      // In case there's additional text before or after the JSON
+      const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        responseContent = jsonMatch[0];
+      }
+      
+      const analysisResult = JSON.parse(responseContent);
+      
+      // Update progress
+      progressCallback?.('Finalizing results', 90);
+      
+      // Generate recommended highlights if they weren't included
+      if (!analysisResult.recommendedHighlights || analysisResult.recommendedHighlights.length === 0) {
+        analysisResult.recommendedHighlights = this.generateRecommendedHighlights(
+          analysisResult.matchedRequirements.map(item => item.requirement),
+          analysisResult.nhsValues || nhsValues,
+          analysisResult.relevantExperience
+        );
+      }
+      
+      if (!analysisResult.nhsValues || analysisResult.nhsValues.length === 0) {
+        analysisResult.nhsValues = nhsValues;
+      }
+      
+      // Complete the progress
+      progressCallback?.('Analysis complete', 100);
+      
+      return analysisResult;
+    } catch (error) {
+      console.error('Error in CV analysis:', error);
+      // Send progress update with error
+      progressCallback?.('Error in analysis', 100);
+      throw error;
+    }
+  }
+  
+  /**
    * Generates a tailored NHS statement that analyzes CV, categorizes experiences,
    * and compares skills with job requirements, written in a human-like style
    */
@@ -782,35 +888,78 @@ export class AIService {
     cv: string,
     jobDescription: string,
     additionalExperience: string = '',
-    writingStyle: 'simple' | 'moderate' | 'advanced' = 'simple'
+    writingStyle: 'simple' | 'moderate' | 'advanced' = 'simple',
+    progressCallback?: (stage: string, percent: number) => void
   ): Promise<{statement: string, analysis: CVAnalysisResult}> {
-    const analysis = await this.analyzeCV(cv, jobDescription, additionalExperience);
+    // Update progress
+    progressCallback?.('Starting analysis', 10);
     
-    // Extract job title from job description
-    const jobTitleMatch = jobDescription.match(/(?:job title|position|role):\s*([^\n]+)/i);
-    const jobTitle = jobTitleMatch ? jobTitleMatch[1].trim() : "the advertised position";
+    const analysis = await this.analyzeCV(cv, jobDescription, additionalExperience, 
+      (stage, percent) => progressCallback?.(stage, percent * 0.7) // Scale to 70% of the total process
+    );
     
-    // Get years of experience
-    const yearsOfExperience = analysis.relevantExperience.yearsOfExperience || "several";
+    // Update progress
+    progressCallback?.('Creating statement', 75);
     
-    // Include NHS values in the statement
-    const nhsValuesText = analysis.nhsValues.length > 0 
-      ? `I strongly believe in the NHS values of ${analysis.nhsValues.join(', ')}, which I've shown in my work.`
-      : 'I strongly believe in NHS values, which I\'ve shown in my work.';
-    
-    // Generate statement based on analysis - using GCSE/A-level style writing (simple, clear language)
-    let statement = `I'm writing to apply for ${jobTitle}. I've worked in healthcare for ${yearsOfExperience} years and enjoy helping patients.
+    try {
+      // Extract job title from job description
+      const jobTitleMatch = jobDescription.match(/(?:job title|position|role):\s*([^\n]+)/i);
+      const jobTitle = jobTitleMatch ? jobTitleMatch[1].trim() : "the advertised position";
+      
+      // Get years of experience
+      const yearsOfExperience = analysis.relevantExperience.yearsOfExperience || "several";
+      
+      // Create a prompt for Anthropic to generate the statement
+      const messages = [
+        {
+          role: "user",
+          content: `Create a personal supporting statement for an NHS job application. The statement should highlight how my experience, skills, and qualifications match the job requirements.
 
-In my previous roles, I've gained skills in ${analysis.relevantSkills.slice(0, 3).join(', ')}. ${analysis.relevantExperience.clinical.length > 0 ? `My clinical experience includes ${analysis.relevantExperience.clinical.slice(0, 2).join(' and ')}` : ''}
-
-${nhsValuesText}
-
-${analysis.missingRequirements.length > 0 ? `I see that you need ${analysis.missingRequirements[0].replace(/^\[(Essential|Desirable)\]\s+/, '')}. While I don't have direct experience with this, I learn quickly and am eager to develop this skill.` : ''}
-
-I want to work for the NHS because I care about helping people. I work well in a team and always help my colleagues when they're busy.
-
-Thank you for considering my application. I'm excited about the chance to join your team and help patients.`;
-    
-    return { statement, analysis };
+          MY CV ANALYSIS:
+          - Education: ${analysis.education.join(', ')}
+          - Clinical Experience: ${analysis.relevantExperience.clinical.join(', ')}
+          - Administrative Experience: ${analysis.relevantExperience.administrative?.join(', ') || 'None'}
+          - Non-Clinical Experience: ${analysis.relevantExperience.nonClinical.join(', ')}
+          - Years of Experience: ${yearsOfExperience}
+          - Skills: ${analysis.relevantSkills.join(', ')}
+          - NHS Values: ${analysis.nhsValues.join(', ')}
+          
+          JOB REQUIREMENTS I MEET:
+          ${analysis.matchedRequirements.map(req => `- ${req.requirement}: ${req.evidence}`).join('\n')}
+          
+          JOB REQUIREMENTS NOT DIRECTLY MENTIONED IN MY CV BUT I CAN ADDRESS:
+          ${additionalExperience}
+          
+          WRITING STYLE: ${writingStyle === 'simple' ? 'Simple, clear language at GCSE level (age 16). Use short sentences and everyday words.' : 
+                         writingStyle === 'moderate' ? 'Moderate complexity at A-level standard (age 18). Some technical terms are appropriate.' :
+                         'Advanced, professional language with appropriate NHS terminology and complex sentence structures.'}
+          
+          Please write a personal supporting statement (about 500-800 words) that:
+          1. Introduces me and my interest in ${jobTitle}
+          2. Highlights how my experience matches the key requirements
+          3. Addresses the NHS values relevant to this role
+          4. Uses a conversational, first-person tone
+          5. Includes specific examples from my experience
+          6. Avoids generic statements and focuses on concrete achievements
+          7. Concludes with why I want this specific role
+          
+          The statement should sound natural and human-written, not like something generated by AI.`
+        }
+      ];
+      
+      // Call Claude API
+      const anthropicResponse = await this.callAnthropic(messages);
+      const statement = anthropicResponse.content[0].text;
+      
+      // Update progress
+      progressCallback?.('Statement complete', 100);
+      
+      return { statement, analysis };
+    } catch (error) {
+      console.error('Error generating statement:', error);
+      // Send progress update with error
+      progressCallback?.('Error generating statement', 100);
+      throw error;
+    }
   }
 }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +10,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 
 interface CVAnalyzerProps {
   cv: string;
@@ -28,6 +28,8 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [additionalSkills, setAdditionalSkills] = useState('');
   const [unmatchedResponses, setUnmatchedResponses] = useState<Record<string, string>>({});
   const [activeStep, setActiveStep] = useState(1);
+  const [progress, setProgress] = useState(0);
+  const [progressStatus, setProgressStatus] = useState('');
 
   // Analyze CV automatically when component loads if CV and job description are available
   useEffect(() => {
@@ -36,6 +38,11 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     }
   }, [cv, jobDescription]);
 
+  const updateProgress = (stage: string, percent: number) => {
+    setProgressStatus(stage);
+    setProgress(percent);
+  };
+
   const analyzeCV = async () => {
     if (!cv || !jobDescription) {
       toast.error('Please upload both your CV and the job description first');
@@ -43,6 +50,9 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     }
 
     setIsAnalyzing(true);
+    setProgress(0);
+    setProgressStatus('Initializing...');
+    
     try {
       console.log("Starting CV analysis");
       // Combine all additional information
@@ -52,7 +62,13 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         additionalSkills && `Additional Skills: ${additionalSkills}`
       ].filter(Boolean).join('\n\n');
       
-      const result = await AIService.analyzeCV(cv, jobDescription, combinedAdditionalInfo);
+      const result = await AIService.analyzeCV(
+        cv, 
+        jobDescription, 
+        combinedAdditionalInfo, 
+        updateProgress
+      );
+      
       console.log("Analysis result:", result);
       setAnalysis(result);
       setActiveStep(2);
@@ -79,6 +95,9 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
     }
 
     setIsGenerating(true);
+    setProgress(0);
+    setProgressStatus('Starting statement generation...');
+    
     try {
       // Combine all additional information including unmatched responses
       const additionalInfo = [
@@ -94,7 +113,8 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         cv,
         jobDescription,
         additionalInfo,
-        'simple' // Fixed to simple style (GCSE level)
+        'simple', // Fixed to simple style (GCSE level)
+        updateProgress
       );
       
       setTailoredStatement(result.statement);
@@ -145,6 +165,21 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         </CardHeader>
         <CardContent>
           <div className="space-y-8">
+            {/* Progress Bar - Always show when analyzing or generating */}
+            {(isAnalyzing || isGenerating) && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm mb-1">
+                  <span>{progressStatus}</span>
+                  <span>{progress}%</span>
+                </div>
+                <Progress 
+                  value={progress} 
+                  className="h-2" 
+                  indicatorClassName={progress === 100 ? "bg-green-500" : ""}
+                />
+              </div>
+            )}
+            
             {/* Additional Information Inputs */}
             <Card className="border border-muted">
               <CardHeader className="pb-2">
@@ -201,11 +236,11 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
             </Card>
             
             {/* Analysis in Progress */}
-            {isAnalyzing && (
+            {isAnalyzing && !analysis && (
               <div className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                 <p className="text-lg font-medium">Analyzing your CV against job requirements...</p>
-                <p className="text-sm text-muted-foreground">This may take a moment</p>
+                <p className="text-sm text-muted-foreground">{progressStatus}</p>
               </div>
             )}
             
@@ -460,6 +495,15 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+            
+            {/* Generation in Progress */}
+            {isGenerating && !tailoredStatement && (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+                <p className="text-lg font-medium">Generating your tailored statement...</p>
+                <p className="text-sm text-muted-foreground">{progressStatus}</p>
               </div>
             )}
             
