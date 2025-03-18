@@ -176,7 +176,7 @@ export class StorageService {
     try {
       if (!keyValue.trim()) return;
       
-      // Use local storage as primary storage due to Supabase policy issues
+      // Use local storage as primary storage - this is critical
       this.saveApiKeyToLocalStorage(provider, keyValue);
       console.log(`Successfully saved ${provider} API key to local storage`);
       
@@ -238,7 +238,7 @@ export class StorageService {
       const localKeys = this.getApiKeysFromLocalStorage();
       console.log("Local storage keys found:", Object.keys(localKeys));
       
-      // Try to get from Supabase as additional source
+      // Try to get from Supabase as additional source, but don't block on error
       try {
         const { data, error } = await supabase
           .from('api_keys')

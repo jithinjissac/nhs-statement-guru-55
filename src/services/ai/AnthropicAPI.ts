@@ -187,7 +187,7 @@ export class AnthropicAPI {
         // Check for network-related errors
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
           console.error('Network error when calling Anthropic API:', fetchError);
-          throw new Error('Network issue detected when calling Anthropic API. The application is now using a server-side approach to work around CORS limitations. Please try again.');
+          throw new Error('Network issue detected when calling Anthropic API. Please make sure the Edge Function is deployed properly and try again.');
         }
         
         // Re-throw the error for other types of errors
