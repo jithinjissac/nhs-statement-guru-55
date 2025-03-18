@@ -847,5 +847,63 @@ export class AIService {
       return mockAnalysis;
     } catch (error) {
       console.error('Error in CV analysis:', error);
-      // Send progress update with error
-      progressCallback?.('Error in analysis', 1
+      throw error;
+    }
+  }
+  
+  /**
+   * Generates a tailored supporting statement based on CV and job description
+   */
+  static async generateTailoredStatement(
+    cv: string,
+    jobDescription: string,
+    additionalInfo: string = '',
+    style: 'simple' | 'professional' | 'comprehensive' = 'professional',
+    progressCallback?: (stage: string, percent: number) => void
+  ): Promise<{ statement: string, analysis: CVAnalysisResult }> {
+    // Update progress
+    progressCallback?.('Starting statement generation', 10);
+    
+    try {
+      // First, analyze the CV to get insights
+      const analysis = await this.analyzeCV(cv, jobDescription, additionalInfo, (stage, percent) => {
+        // Scale progress to first 50%
+        progressCallback?.(stage, Math.floor(percent * 0.5));
+      });
+      
+      progressCallback?.('Creating personalized statement', 60);
+      
+      // Wait a bit to simulate processing time
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Define statement sections based on analysis
+      const values = analysis.nhsValues.slice(0, 3).join(', ');
+      const skills = analysis.relevantSkills.slice(0, 5).join(', ');
+      const experience = analysis.relevantExperience.yearsOfExperience;
+      
+      // Create style variations
+      let statement = '';
+      
+      // We'll use a mock statement for demonstration
+      const mockStatement = `I am a dedicated healthcare professional with ${experience} years of experience in various clinical settings. Throughout my career, I have consistently demonstrated a commitment to ${values}, which aligns perfectly with the NHS values.
+
+My experience as a Staff Nurse at General Hospital has equipped me with strong skills in ${skills}. I have successfully managed complex patient caseloads, maintained accurate clinical documentation, and collaborated effectively with multidisciplinary teams to ensure optimal patient outcomes.
+
+My qualification as a Registered Nurse with the NMC since 2015 (PIN: 15I3344E) meets the essential requirement for this role. My eight years of clinical nursing experience exceeds the minimum three years required, giving me a solid foundation of knowledge and expertise to draw upon.
+
+I am particularly proud of my work in implementing electronic patient record systems, which improved efficiency and reduced documentation errors by 35%. This experience directly relates to the desirable requirement for familiarity with electronic record systems.
+
+During my time at Community Clinic, I developed excellent communication skills through daily patient consultations and family meetings. I believe effective communication is essential in healthcare to ensure patients feel heard and understood, and to facilitate seamless teamwork among colleagues.
+
+I am eager to bring my clinical expertise, administrative knowledge, and patient-centered approach to this role. Thank you for considering my application. I look forward to the opportunity to discuss how my experience and values align with your team's needs.`;
+      
+      // Complete the progress
+      progressCallback?.('Statement generation complete', 100);
+      
+      return { statement: mockStatement, analysis };
+    } catch (error) {
+      console.error('Error generating statement:', error);
+      throw error;
+    }
+  }
+}
