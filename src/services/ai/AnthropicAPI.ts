@@ -51,7 +51,22 @@ export class AnthropicAPI {
       try {
         // Log the start of the API call
         console.log("Starting Anthropic API call with model claude-3-sonnet-20240229");
-        console.log("Message payload size:", JSON.stringify(messages).length, "bytes");
+        
+        // Validate messages format
+        if (!Array.isArray(messages) || messages.length === 0) {
+          throw new Error("Messages must be a non-empty array");
+        }
+        
+        // Prepare the payload
+        const payload = {
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: maxTokens,
+          messages: messages,
+          response_format: { type: "json_object" } // Force JSON response format
+        };
+        
+        console.log("Message payload size:", JSON.stringify(payload).length, "bytes");
+        console.log("First message preview:", messages[0]?.content?.substring(0, 100) + "...");
         
         // Add retry logic for network flakiness
         let retries = 0;
@@ -69,12 +84,7 @@ export class AnthropicAPI {
             
             // Try the Supabase Edge Function approach
             const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
-              body: {
-                model: 'claude-3-sonnet-20240229',
-                max_tokens: maxTokens,
-                messages: messages,
-                response_format: { type: "json_object" } // Force JSON response format
-              }
+              body: payload
             });
             
             // Clear the timeout since we got a response
@@ -148,8 +158,14 @@ export class AnthropicAPI {
           throw new Error('Network issue detected when calling Anthropic API. Please make sure the Edge Function is deployed properly and try again.');
         }
         
-        // Re-throw the error for other types of errors
+        // Log the detailed error for debugging
         console.error('Error in fetch operation:', fetchError);
+        
+        // Re-throw the error with a more informative message
+        if (fetchError.message.includes('Edge function error')) {
+          throw new Error(`Edge function error: ${fetchError.message}. Please check that the Edge Function is deployed and the API key is valid.`);
+        }
+        
         throw fetchError;
       }
     } catch (error) {
