@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -198,6 +199,7 @@ export class StorageService {
           if (error) throw error;
         } else {
           // Insert new key
+          // Fix: Include the required created_by field with a default value
           const { error } = await supabase
             .from('api_keys')
             .insert({
@@ -205,8 +207,7 @@ export class StorageService {
               name: provider,
               key: keyValue,
               active: true,
-              // Remove the problematic reference to created_by that's causing recursion
-              // created_by: id // This line was causing the recursion issue
+              created_by: 'system' // Set a default value to satisfy the schema requirement
             });
           
           if (error) throw error;

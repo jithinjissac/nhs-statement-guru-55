@@ -2,6 +2,7 @@
 import { AIModelConfig } from './types';
 import { AnalysisService } from './AnalysisService';
 import { ExtractionService } from './ExtractionService';
+import { StorageService } from '../StorageService';
 
 export class AIService {
   private static models: AIModelConfig[] = [
@@ -36,8 +37,19 @@ export class AIService {
   
   private static apiKeys: Record<string, string> = {};
   
+  static async initializeApiKeys(): Promise<void> {
+    try {
+      this.apiKeys = await StorageService.getApiKeys();
+    } catch (error) {
+      console.error('Failed to initialize API keys:', error);
+    }
+  }
+  
   static setApiKey(provider: string, key: string): void {
     this.apiKeys[provider.toLowerCase()] = key;
+    // Save to storage
+    StorageService.saveApiKey(provider.toLowerCase(), key)
+      .catch(error => console.error('Error saving API key:', error));
   }
   
   static getApiKey(provider: string): string | null {
@@ -57,10 +69,18 @@ export class AIService {
   
   // Delegate analysis methods to the specialized services
   static async analyzeCV(...args: Parameters<typeof AnalysisService.analyzeCV>) {
+    // Make sure API keys are loaded
+    if (Object.keys(this.apiKeys).length === 0) {
+      await this.initializeApiKeys();
+    }
     return AnalysisService.analyzeCV(...args);
   }
   
   static async generateTailoredStatement(...args: Parameters<typeof AnalysisService.generateTailoredStatement>) {
+    // Make sure API keys are loaded
+    if (Object.keys(this.apiKeys).length === 0) {
+      await this.initializeApiKeys();
+    }
     return AnalysisService.generateTailoredStatement(...args);
   }
   
@@ -85,3 +105,8 @@ export class AIService {
     return ExtractionService.extractExperience(cvText);
   }
 }
+
+// Initialize API keys when module loads
+AIService.initializeApiKeys().catch(err => {
+  console.warn('Failed to load API keys:', err);
+});
