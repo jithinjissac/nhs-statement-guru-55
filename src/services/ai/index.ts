@@ -6,3 +6,5 @@ export * from './AnalysisService';
 export * from './ExtractionService';
 export * from './MatchingService';
 export * from './AnthropicAPI';
+export * from './ApiKeyService';
+export * from './AnthropicApiClient';
