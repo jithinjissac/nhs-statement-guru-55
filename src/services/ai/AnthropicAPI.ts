@@ -67,7 +67,7 @@ export class AnthropicAPI {
             
             console.log("Calling Anthropic API through Edge Function proxy...");
             
-            // 1. Try the Supabase Edge Function approach
+            // Try the Supabase Edge Function approach
             try {
               const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
                 body: {
@@ -91,56 +91,11 @@ export class AnthropicAPI {
               }
               
               console.log("Anthropic API call completed successfully via Edge Function");
+              console.log("Response preview:", JSON.stringify(data).substring(0, 200) + "...");
               return data;
             } catch (edgeFunctionError) {
               console.error("Failed to use Edge Function, falling back to direct API call:", edgeFunctionError);
-              
-              // 2. Try direct API call with API key as a fallback approach (will still have CORS issues in browser)
-              // Only attempt this in development environment where CORS might be disabled
-              if (import.meta.env.DEV) {
-                console.log("Attempting direct API call (dev environment only)...");
-                
-                const response = await fetch('https://api.anthropic.com/v1/messages', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': finalApiKey,
-                    'anthropic-version': '2023-06-01'
-                  },
-                  body: JSON.stringify({
-                    model: 'claude-3-sonnet-20240229',
-                    max_tokens: maxTokens,
-                    messages: messages
-                  }),
-                  signal: controller.signal
-                });
-                
-                // Clear the timeout since we got a response
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                  const errorText = await response.text();
-                  let errorData;
-                  
-                  try {
-                    errorData = JSON.parse(errorText);
-                  } catch (e) {
-                    errorData = { error: { message: errorText || response.statusText } };
-                  }
-                  
-                  const errorMessage = errorData.error?.message || response.statusText;
-                  console.error('Anthropic API error response:', errorData);
-                  console.error('Status code:', response.status);
-                  
-                  throw new Error(`Anthropic API error (${response.status}): ${errorMessage}`);
-                }
-                
-                const data = await response.json();
-                console.log("Anthropic API call completed successfully");
-                return data;
-              } else {
-                throw new Error("Edge Function failed and direct API calls are not supported in production due to CORS restrictions. Please ensure the Edge Function is deployed correctly.");
-              }
+              throw edgeFunctionError;
             }
           } catch (fetchAttemptError) {
             lastError = fetchAttemptError as Error;

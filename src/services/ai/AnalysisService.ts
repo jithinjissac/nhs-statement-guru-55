@@ -47,7 +47,7 @@ Please analyze the CV against the job description and provide a structured JSON 
 6. NHS values mentioned in the job description
 7. Education qualifications from the CV
 
-Return the response as a valid JSON object with the following structure:
+Return ONLY a valid JSON object with the following structure (no extra text before or after):
 {
   "relevantSkills": ["skill1", "skill2", ...],
   "relevantExperience": {
@@ -73,21 +73,99 @@ Return the response as a valid JSON object with the following structure:
       
       // Extract and parse the JSON from the response
       const content = response.content[0].text;
+      console.log("Raw response content:", content.substring(0, 200) + "...");
       
-      // Find the JSON in the content (may be wrapped in ```json or just plain JSON)
-      let jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || content.match(/{[\s\S]*?}/);
-      let jsonString = jsonMatch ? jsonMatch[0] : content;
-      
-      // Clean up the string to ensure it's valid JSON
-      jsonString = jsonString.replace(/```json|```/g, '').trim();
-      
-      // Parse the JSON response
-      const analysis: CVAnalysisResult = JSON.parse(jsonString);
-      
-      // Complete the progress
-      progressCallback?.('Analysis complete', 100);
-      
-      return analysis;
+      // Enhanced JSON extraction with robust error handling
+      let jsonString = '';
+      try {
+        // First try to extract JSON between code blocks
+        const jsonCodeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonCodeBlockMatch && jsonCodeBlockMatch[1]) {
+          jsonString = jsonCodeBlockMatch[1];
+        } else {
+          // Then try to find JSON between curly braces
+          const jsonBracesMatch = content.match(/{[\s\S]*?}/);
+          if (jsonBracesMatch) {
+            jsonString = jsonBracesMatch[0];
+          } else {
+            // Last resort: assume the whole content is JSON
+            jsonString = content;
+          }
+        }
+        
+        // Clean up the string to ensure it's valid JSON
+        jsonString = jsonString.replace(/```json|```/g, '').trim();
+        
+        // Log a subset of the JSON for debugging
+        console.log("Extracted JSON string (first 200 chars):", jsonString.substring(0, 200) + "...");
+        
+        // Attempt to sanitize potential formatting issues that can break JSON
+        jsonString = jsonString
+          // Fix trailing commas in arrays and objects
+          .replace(/,\s*}/g, '}')
+          .replace(/,\s*\]/g, ']')
+          // Fix missing commas between properties
+          .replace(/"\s*{/g, '",{')
+          .replace(/"\s*\[/g, '",[')
+          // Fix unquoted property names
+          .replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
+        
+        // Parse the JSON response
+        const analysis: CVAnalysisResult = JSON.parse(jsonString);
+        
+        // Validate the analysis object has the expected structure
+        if (!analysis.relevantSkills) analysis.relevantSkills = [];
+        if (!analysis.relevantExperience) {
+          analysis.relevantExperience = {
+            clinical: [],
+            nonClinical: [],
+            administrative: [],
+            yearsOfExperience: 0
+          };
+        }
+        if (!analysis.relevantExperience.clinical) analysis.relevantExperience.clinical = [];
+        if (!analysis.relevantExperience.nonClinical) analysis.relevantExperience.nonClinical = [];
+        if (!analysis.relevantExperience.administrative) analysis.relevantExperience.administrative = [];
+        if (!analysis.matchedRequirements) analysis.matchedRequirements = [];
+        if (!analysis.missingRequirements) analysis.missingRequirements = [];
+        if (!analysis.recommendedHighlights) analysis.recommendedHighlights = [];
+        if (!analysis.nhsValues) analysis.nhsValues = [];
+        if (!analysis.education) analysis.education = [];
+
+        // Complete the progress
+        progressCallback?.('Analysis complete', 100);
+        
+        return analysis;
+      } catch (jsonError) {
+        console.error('Error parsing JSON response:', jsonError);
+        console.error('Attempted to parse string:', jsonString);
+        console.error('Original content:', content);
+        
+        // Create a fallback analysis result when JSON parsing fails
+        const fallbackAnalysis: CVAnalysisResult = {
+          relevantSkills: ["Failed to extract skills from CV"],
+          relevantExperience: {
+            clinical: ["Could not extract clinical experience"],
+            nonClinical: ["Could not extract non-clinical experience"],
+            administrative: ["Could not extract administrative experience"],
+            yearsOfExperience: 0
+          },
+          matchedRequirements: [
+            {
+              requirement: "Error processing requirements matching",
+              evidence: "Please try again or upload a different CV format",
+              keywords: ["error"]
+            }
+          ],
+          missingRequirements: ["Error processing requirements"],
+          recommendedHighlights: ["Error extracting highlights"],
+          nhsValues: ["Unable to extract NHS values"],
+          education: ["Unable to extract education details"]
+        };
+        
+        // Throw a more informative error
+        throw new Error(`Failed to parse AI response into valid JSON: ${jsonError.message}`);
+      }
     } catch (error) {
       console.error('Error in CV analysis:', error);
       throw error;
