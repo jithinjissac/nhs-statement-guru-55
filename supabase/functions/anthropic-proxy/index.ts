@@ -34,8 +34,15 @@ serve(async (req) => {
     console.log("Received request for Anthropic API:", {
       model: requestData.model,
       messageCount: requestData.messages?.length || 0,
-      maxTokens: requestData.max_tokens
+      maxTokens: requestData.max_tokens,
+      responseFormat: requestData.response_format || "not specified"
     });
+
+    // Ensure response_format is set for JSON output
+    if (!requestData.response_format) {
+      requestData.response_format = { type: "json_object" };
+      console.log("Added JSON response format to request");
+    }
 
     // Forward the request to Anthropic API
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -67,6 +74,24 @@ serve(async (req) => {
     }
 
     console.log("Anthropic API call successful");
+    console.log("Response preview:", JSON.stringify(responseData).substring(0, 200) + "...");
+    
+    // Validate that the response contains valid JSON in the content field if using json_object format
+    if (requestData.response_format?.type === "json_object") {
+      try {
+        if (responseData.content && 
+            responseData.content[0] && 
+            responseData.content[0].text) {
+          // Try parsing the JSON to verify it's valid
+          const jsonContent = responseData.content[0].text;
+          JSON.parse(jsonContent);
+          console.log("Validated JSON response format is valid");
+        }
+      } catch (jsonError) {
+        console.error("Warning: Anthropic returned invalid JSON despite json_object format:", jsonError);
+        // We don't fail here, as the client will handle the sanitization
+      }
+    }
     
     // Return the API response
     return new Response(

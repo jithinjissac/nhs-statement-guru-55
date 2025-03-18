@@ -58,7 +58,7 @@ export class AnthropicAPI {
         const maxRetries = 2;
         let lastError: Error | null = null;
         
-        // First try using the Supabase Edge Function to avoid CORS issues
+        // Use the Supabase Edge Function to avoid CORS issues
         while (retries <= maxRetries) {
           try {
             if (retries > 0) {
@@ -68,35 +68,38 @@ export class AnthropicAPI {
             console.log("Calling Anthropic API through Edge Function proxy...");
             
             // Try the Supabase Edge Function approach
-            try {
-              const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
-                body: {
-                  model: 'claude-3-sonnet-20240229',
-                  max_tokens: maxTokens,
-                  messages: messages
-                }
-              });
-              
-              // Clear the timeout since we got a response
-              clearTimeout(timeoutId);
-              
-              if (error) {
-                console.error("Edge function error:", error);
-                throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
+            const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
+              body: {
+                model: 'claude-3-sonnet-20240229',
+                max_tokens: maxTokens,
+                messages: messages,
+                response_format: { type: "json_object" } // Force JSON response format
               }
-              
-              if (data.error) {
-                console.error("Anthropic API error via Edge Function:", data.error);
-                throw new Error(`Anthropic API error: ${data.error.message || JSON.stringify(data.error)}`);
-              }
-              
-              console.log("Anthropic API call completed successfully via Edge Function");
-              console.log("Response preview:", JSON.stringify(data).substring(0, 200) + "...");
-              return data;
-            } catch (edgeFunctionError) {
-              console.error("Failed to use Edge Function, falling back to direct API call:", edgeFunctionError);
-              throw edgeFunctionError;
+            });
+            
+            // Clear the timeout since we got a response
+            clearTimeout(timeoutId);
+            
+            if (error) {
+              console.error("Edge function error:", error);
+              throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
             }
+            
+            if (data.error) {
+              console.error("Anthropic API error via Edge Function:", data.error);
+              throw new Error(`Anthropic API error: ${data.error.message || JSON.stringify(data.error)}`);
+            }
+            
+            console.log("Anthropic API call completed successfully via Edge Function");
+            console.log("Response preview:", JSON.stringify(data).substring(0, 200) + "...");
+            
+            // Validate the response structure before returning
+            if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+              console.warn("Unexpected response structure from Anthropic API:", JSON.stringify(data).substring(0, 200));
+              throw new Error("Invalid response structure from Anthropic API");
+            }
+            
+            return data;
           } catch (fetchAttemptError) {
             lastError = fetchAttemptError as Error;
             
