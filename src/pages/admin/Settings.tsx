@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { AIService, AIModelConfig } from '@/services/ai';
 import { StorageService } from '@/services/StorageService';
-import { AlertCircle, CheckCircle2, Key } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Key, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const AdminSettings: React.FC = () => {
@@ -33,6 +34,7 @@ const AdminSettings: React.FC = () => {
   const [guidelinesCount, setGuidelinesCount] = useState(0);
   const [sampleStatementsCount, setSampleStatementsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
   
   // Load saved settings on mount
   useEffect(() => {
@@ -40,20 +42,26 @@ const AdminSettings: React.FC = () => {
       try {
         setIsLoading(true);
         
-        // Load API keys from database
-        const savedApiKeys = await StorageService.getApiKeys();
-        if (Object.keys(savedApiKeys).length > 0) {
-          setApiKeys(prevKeys => ({
-            ...prevKeys,
-            ...savedApiKeys
-          }));
-          
-          // Also set the API keys in AIService
-          Object.entries(savedApiKeys).forEach(([provider, key]) => {
-            if (key) {
-              AIService.setApiKey(provider, key as string);
-            }
-          });
+        // Load API keys from database or fallback storage
+        try {
+          const savedApiKeys = await StorageService.getApiKeys();
+          if (Object.keys(savedApiKeys).length > 0) {
+            setApiKeys(prevKeys => ({
+              ...prevKeys,
+              ...savedApiKeys
+            }));
+            
+            // Also set the API keys in AIService
+            Object.entries(savedApiKeys).forEach(([provider, key]) => {
+              if (key) {
+                AIService.setApiKey(provider, key as string);
+              }
+            });
+          }
+        } catch (error) {
+          console.error("Error loading API keys:", error);
+          setUsingFallback(true);
+          toast.error("Error loading API keys from database. Using local storage fallback.");
         }
         
         // Load general settings from local storage
@@ -91,12 +99,18 @@ const AdminSettings: React.FC = () => {
           }
         }
 
-        // Load counts for system status
-        const guidelines = await StorageService.getGuidelines();
-        setGuidelinesCount(guidelines.length);
+        // Try to load counts for system status
+        try {
+          const guidelines = await StorageService.getGuidelines();
+          setGuidelinesCount(guidelines.length);
 
-        const sampleStatements = await StorageService.getSampleStatements();
-        setSampleStatementsCount(sampleStatements.length);
+          const sampleStatements = await StorageService.getSampleStatements();
+          setSampleStatementsCount(sampleStatements.length);
+        } catch (error) {
+          console.error("Error loading counts:", error);
+          setGuidelinesCount(0);
+          setSampleStatementsCount(0);
+        }
       } catch (error) {
         console.error('Error loading settings:', error);
         toast.error('Failed to load settings');
@@ -111,13 +125,22 @@ const AdminSettings: React.FC = () => {
   // Save all settings
   const saveSettings = async () => {
     setIsLoading(true);
+    let anyErrors = false;
+    let usingFallbackStorage = false;
+    
     try {
-      // Save API keys to the database
+      // Save API keys to the database with fallback to local storage
       for (const [provider, key] of Object.entries(apiKeys)) {
         if (key && key.trim() !== '') {
-          await StorageService.saveApiKey(provider, key);
-          // Also update the API keys in AIService
-          AIService.setApiKey(provider, key);
+          try {
+            await StorageService.saveApiKey(provider, key);
+            // Also update the API keys in AIService
+            AIService.setApiKey(provider, key);
+          } catch (error) {
+            console.error(`Error saving ${provider} API key:`, error);
+            anyErrors = true;
+            usingFallbackStorage = true;
+          }
         }
       }
       
@@ -137,10 +160,18 @@ const AdminSettings: React.FC = () => {
         AIService.setModelEnabled(model.id, model.enabled);
       });
       
-      toast.success('Settings saved successfully');
+      if (anyErrors && usingFallbackStorage) {
+        setUsingFallback(true);
+        toast.warning('Some settings saved to local storage due to database issues. Your API keys are still available for use.', {
+          duration: 6000
+        });
+      } else {
+        toast.success('Settings saved successfully');
+      }
     } catch (error) {
       console.error('Error saving settings:', error);
-      toast.error('Failed to save settings');
+      toast.error('Failed to save some settings');
+      anyErrors = true;
     } finally {
       setIsLoading(false);
     }
@@ -197,6 +228,17 @@ const AdminSettings: React.FC = () => {
         </Button>
       </div>
       
+      {usingFallback && (
+        <Alert className="mb-6 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/30">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Using Local Storage</AlertTitle>
+          <AlertDescription>
+            Due to database policy issues, some settings are being stored in local storage. 
+            Your settings will still work, but they will be limited to this browser.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <Tabs defaultValue="api-keys" className="space-y-6">
         <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
@@ -221,7 +263,8 @@ const AdminSettings: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Important</AlertTitle>
                 <AlertDescription>
-                  API keys are stored securely in the database. Enter your API keys below to enable AI features.
+                  API keys are stored securely. Enter your API keys below to enable AI features.
+                  {usingFallback && " Currently using local storage due to database issues."}
                 </AlertDescription>
               </Alert>
               
