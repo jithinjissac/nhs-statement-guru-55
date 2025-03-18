@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AIService, CVAnalysisResult } from '@/services/ai';
@@ -9,7 +8,7 @@ import LoadingSpinner from './cv-analyzer/LoadingSpinner';
 import AnalysisStep from './cv-analyzer/AnalysisStep';
 import TailoredStatement from './cv-analyzer/TailoredStatement';
 import { Button } from './ui/button';
-import { AlertTriangle, Settings, ExternalLink, Wifi, AlertCircle, Info } from 'lucide-react';
+import { AlertTriangle, Settings, ExternalLink, Wifi, AlertCircle, Info, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface CVAnalyzerProps {
@@ -75,14 +74,12 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       setAnalysis(result);
       setActiveStep(2);
       toast.success('CV analysis completed successfully');
-      // Reset retry count on success
       setRetryCount(0);
     } catch (error) {
       console.error('Error analyzing CV:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setError(errorMessage);
       toast.error('Failed to analyze CV. Please try again.');
-      // Increment retry count
       setRetryCount(prev => prev + 1);
     } finally {
       setIsAnalyzing(false);
@@ -133,14 +130,12 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       setActiveStep(3);
       toast.success('Tailored statement generated successfully');
       onStatementGenerated(result.statement);
-      // Reset retry count on success
       setRetryCount(0);
     } catch (error) {
       console.error('Error generating statement:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setError(errorMessage);
       toast.error('Failed to generate statement. Please try again.');
-      // Increment retry count
       setRetryCount(prev => prev + 1);
     } finally {
       setIsGenerating(false);
@@ -164,6 +159,9 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                            error?.toLowerCase().includes('timeout') ||
                            error?.toLowerCase().includes('connection') ||
                            error?.toLowerCase().includes('internet');
+                           
+    const isCorsError = error?.toLowerCase().includes('cors') || 
+                         error?.toLowerCase().includes('cross-origin');
                            
     const isRateLimitError = error?.toLowerCase().includes('rate limit') ||
                              error?.toLowerCase().includes('too many requests') ||
@@ -205,6 +203,23 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
                 </Button>
               </div>
             </div>
+          ) : isCorsError ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="h-4 w-4 flex-shrink-0" />
+                <p className="font-medium">CORS Issue Detected</p>
+              </div>
+              <p className="mb-2">Your browser is blocking direct access to the Anthropic API due to security restrictions (CORS).</p>
+              <p className="text-xs mb-2">We're attempting to use a proxy solution, but it may not work in all environments.</p>
+              <div className="mt-2 bg-blue-50 p-3 border border-blue-100 rounded text-blue-800">
+                <p className="text-xs font-medium">Alternative solutions:</p>
+                <ul className="text-xs list-disc pl-4 mt-1">
+                  <li>Try using a different browser</li>
+                  <li>Try a browser extension that disables CORS for testing purposes</li>
+                  <li>Consider implementing a server-side proxy for this application</li>
+                </ul>
+              </div>
+            </div>
           ) : isNetworkError ? (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
               <div className="flex items-center gap-2 mb-2">
@@ -214,7 +229,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               <p>There seems to be a problem connecting to the Anthropic API. Please check your internet connection and try again.</p>
               {retryCount > 1 && (
                 <p className="mt-2 text-xs">
-                  If this issue persists after multiple attempts, it may be a temporary problem with the Anthropic API servers.
+                  If this issue persists after multiple attempts, it may be a temporary problem with the Anthropic API servers or CORS restrictions.
                 </p>
               )}
             </div>
@@ -315,3 +330,4 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
 };
 
 export default CVAnalyzer;
+
