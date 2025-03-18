@@ -13,7 +13,6 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import CreateStatement from "./pages/CreateStatement";
-import AIDetection from "./pages/AIDetection";
 import AdminGuidelines from "./pages/admin/Guidelines";
 import AdminSampleStatements from "./pages/admin/SampleStatements";
 import AdminSettings from "./pages/admin/Settings";
@@ -42,11 +41,6 @@ const App = () => (
               <Route path="/create" element={
                 <ProtectedRoute>
                   <CreateStatement />
-                </ProtectedRoute>
-              } />
-              <Route path="/detection" element={
-                <ProtectedRoute>
-                  <AIDetection />
                 </ProtectedRoute>
               } />
               

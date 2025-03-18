@@ -36,7 +36,6 @@ const NavBar: React.FC = () => {
   const navItems = [
     { label: 'Home', path: '/', icon: <Home className="h-4 w-4 mr-2" /> },
     { label: 'Create Statement', path: '/create', icon: <FileText className="h-4 w-4 mr-2" /> },
-    { label: 'AI Detection', path: '/detection', icon: <FileCheck className="h-4 w-4 mr-2" /> },
   ];
   
   const adminItems = [
@@ -241,3 +240,4 @@ const NavBar: React.FC = () => {
 };
 
 export default NavBar;
+
