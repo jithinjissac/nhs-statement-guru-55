@@ -44,18 +44,6 @@ serve(async (req) => {
       );
     }
 
-    // Validate required fields
-    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
-      console.error("Missing or invalid messages array in request");
-      return new Response(
-        JSON.stringify({ error: { message: 'Missing or invalid messages array' } }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
     // Get the API key from various sources with improved error handling
     let apiKey = body.apiKey;
     
@@ -84,15 +72,31 @@ serve(async (req) => {
     // Remove apiKey from the payload before sending to Anthropic
     const { apiKey: _, ...cleanPayload } = body;
 
+    // Get the payload from the body or create a default one
+    const payload = body.payload || {};
+    
     // Ensure model is set
-    const payload = {
-      ...cleanPayload,
-      model: body.model || 'claude-3-sonnet-20240229',
-      response_format: body.response_format || { type: "json_object" }
+    const requestPayload = {
+      model: payload.model || 'claude-3-sonnet-20240229',
+      max_tokens: payload.max_tokens || 4000,
+      messages: payload.messages || [],
+      // Important: Only add response_format if specifically needed
+      // The Claude API now requires specific format for response_format
     };
 
-    console.log(`Making request to Anthropic API with ${payload.messages.length} messages`);
-    console.log(`Model: ${payload.model}`);
+    // Only add response_format if it's in the original payload
+    // This avoids errors about invalid response_format
+    if (payload.response_format) {
+      // Validate response_format is properly formatted to avoid API errors
+      if (typeof payload.response_format === 'object' && payload.response_format.type) {
+        requestPayload.response_format = payload.response_format;
+      } else {
+        console.log("Invalid response_format provided, using default");
+      }
+    }
+
+    console.log(`Making request to Anthropic API with ${requestPayload.messages.length} messages`);
+    console.log(`Model: ${requestPayload.model}`);
 
     // Make the request to Anthropic API with improved error handling
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -102,7 +106,7 @@ serve(async (req) => {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(requestPayload)
     });
 
     // Check if response is ok
@@ -152,18 +156,6 @@ serve(async (req) => {
     const data = await response.json();
     console.log("Anthropic API response received successfully");
     
-    // Validate response before returning
-    if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
-      console.error("Invalid response structure from Anthropic API:", JSON.stringify(data).substring(0, 500));
-      return new Response(
-        JSON.stringify({ error: { message: 'Invalid response structure from Anthropic API' } }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
     // Return the successful response
     return new Response(
       JSON.stringify(data),

@@ -28,8 +28,12 @@ export class AnthropicAPI {
       console.log("Message payload size:", JSON.stringify(messages).length, "bytes");
       console.log("First message preview:", messages[0]?.content?.substring(0, 100) + "...");
       
-      // Prepare payload
-      const payload = AnthropicApiClient.preparePayload(messages, maxTokens);
+      // Prepare payload - Remove response_format to avoid API errors
+      const payload = {
+        model: 'claude-3-sonnet-20240229',
+        max_tokens: maxTokens,
+        messages: messages
+      };
 
       console.log("Using Supabase Edge Function to avoid CORS issues");
       // Call via Supabase Edge Function
