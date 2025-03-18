@@ -2,6 +2,7 @@
 import { toast } from 'sonner';
 import { ApiKeyService } from './ApiKeyService';
 import { AnthropicApiClient } from './AnthropicApiClient';
+import { supabase } from '@/integrations/supabase/client';
 
 export class AnthropicAPI {
   /**
@@ -29,10 +30,27 @@ export class AnthropicAPI {
       
       // Prepare payload
       const payload = AnthropicApiClient.preparePayload(messages, maxTokens);
+
+      console.log("Using Supabase Edge Function to avoid CORS issues");
+      // Call via Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
+        body: {
+          apiKey,
+          payload
+        }
+      });
       
-      // Make the direct API call
-      return await AnthropicApiClient.callApi(payload, apiKey);
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(`Error from proxy: ${error.message}`);
+      }
       
+      if (!data) {
+        throw new Error('No data returned from edge function');
+      }
+      
+      console.log("Anthropic API call via Edge Function completed successfully");
+      return data;
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
       // Show user-friendly toast

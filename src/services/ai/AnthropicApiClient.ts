@@ -42,7 +42,9 @@ export class AnthropicApiClient {
   }
   
   /**
-   * Makes the direct API call to Anthropic
+   * Makes the direct API call to Anthropic - Note: this method is not used
+   * directly anymore as we use the Edge Function to avoid CORS issues
+   * but is kept for reference and as a backup solution
    */
   static async callApi(payload: any, apiKey: string): Promise<any> {
     // Set up timeout handling
