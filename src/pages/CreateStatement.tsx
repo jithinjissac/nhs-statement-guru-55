@@ -4,36 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useDropzone } from 'react-dropzone';
-import { FileUp, FileText, Upload, Trash2, Download, Check, AlertTriangle, RefreshCw, ChevronRight, Settings, Shield } from 'lucide-react';
+import { FileUp, FileText, Upload, Trash2, Download, Check, AlertTriangle, RefreshCw, ChevronRight, Shield } from 'lucide-react';
 import { FileProcessingService, ProcessedFile } from '@/services/FileProcessingService';
-import { AIService, StatementGenerationOptions } from '@/services/AIService';
+import { AIService } from '@/services/AIService';
 import { StorageService } from '@/services/StorageService';
 import { toast } from 'sonner';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
-import { 
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import CVAnalyzer from '@/components/CVAnalyzer';
 
@@ -51,20 +26,7 @@ const CreateStatement: React.FC = () => {
   const [editedStatement, setEditedStatement] = useState('');
   const [detectionResults, setDetectionResults] = useState<any[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [jobSpecificExperiences, setJobSpecificExperiences] = useState('');
 
-  // Generation options
-  const [generationOptions, setGenerationOptions] = useState<StatementGenerationOptions>({
-    humanizeLevel: 'high',
-    tone: 'professional',
-    detailLevel: 'detailed',
-    focusAreas: [],
-  });
-  
-  // Get guidelines and samples from storage
-  const guidelines = StorageService.getGuidelines();
-  const sampleStatements = StorageService.getSampleStatements();
-  
   // CV dropzone
   const onDropCV = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -76,12 +38,17 @@ const CreateStatement: React.FC = () => {
       setCV(processedFile);
       setProcessingStatus('complete');
       toast.success('CV processed successfully');
+      
+      // Automatically proceed to analysis if both files are uploaded
+      if (jobDescription) {
+        setActiveStep(2);
+      }
     } catch (error) {
       console.error('Error processing CV:', error);
       setProcessingStatus('error');
       toast.error('Failed to process CV. Please try another file.');
     }
-  }, []);
+  }, [jobDescription]);
   
   const { getRootProps: getCVRootProps, getInputProps: getCVInputProps, isDragActive: isCVDragActive } = useDropzone({
     onDrop: onDropCV,
@@ -105,12 +72,17 @@ const CreateStatement: React.FC = () => {
       setJobDescription(processedFile);
       setProcessingStatus('complete');
       toast.success('Job description processed successfully');
+      
+      // Automatically proceed to analysis if both files are uploaded
+      if (cv) {
+        setActiveStep(2);
+      }
     } catch (error) {
       console.error('Error processing job description:', error);
       setProcessingStatus('error');
       toast.error('Failed to process job description. Please try another file.');
     }
-  }, []);
+  }, [cv]);
   
   const { 
     getRootProps: getJobDescRootProps, 
@@ -130,11 +102,17 @@ const CreateStatement: React.FC = () => {
   // Handle document removal
   const handleRemoveCV = () => {
     setCV(null);
+    if (activeStep > 1) {
+      setActiveStep(1);
+    }
     toast.info('CV removed');
   };
   
   const handleRemoveJobDescription = () => {
     setJobDescription(null);
+    if (activeStep > 1) {
+      setActiveStep(1);
+    }
     toast.info('Job description removed');
   };
   
@@ -143,57 +121,6 @@ const CreateStatement: React.FC = () => {
     setGeneratedStatement(statement);
     setEditedStatement(statement);
     setActiveStep(3);
-  };
-  
-  // Generate the statement
-  const generateStatement = async () => {
-    if (!cv || !jobDescription) {
-      toast.error('Please upload both your CV and the job description');
-      return;
-    }
-    
-    setIsGenerating(true);
-    setProgress(0);
-    
-    try {
-      // Simulate progress updates
-      const interval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 95) {
-            clearInterval(interval);
-            return prev;
-          }
-          return prev + 5;
-        });
-      }, 300);
-      
-      // Get guidelines and samples for the prompt
-      const guidelineContents = guidelines.map(g => g.content);
-      const sampleContents = sampleStatements.map(s => s.content);
-      
-      // Generate the statement with the experience statement included
-      const statement = await AIService.generateStatement(
-        cv.content,
-        jobDescription.content,
-        jobSpecificExperiences,
-        guidelineContents,
-        sampleContents,
-        generationOptions
-      );
-      
-      setGeneratedStatement(statement);
-      setEditedStatement(statement);
-      setActiveStep(3);
-      toast.success('Supporting statement generated successfully');
-      
-      clearInterval(interval);
-      setProgress(100);
-    } catch (error) {
-      console.error('Error generating statement:', error);
-      toast.error('Failed to generate statement. Please try again.');
-    } finally {
-      setIsGenerating(false);
-    }
   };
   
   // Test AI detection
@@ -393,39 +320,18 @@ const CreateStatement: React.FC = () => {
               </Card>
             </div>
             
-            {/* Experience Statement */}
+            {/* Next Button - Only if both documents are uploaded */}
             {cv && jobDescription && (
-              <Card className="overflow-hidden">
-                <CardContent className="p-6">
-                  <div className="mb-4 flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-nhs-blue" />
-                    <h3 className="text-lg font-semibold">Additional Job-Specific Experience</h3>
-                  </div>
-                  
-                  <Textarea
-                    className="min-h-[120px]"
-                    placeholder="Add any specific experiences, skills, or achievements relevant to this job that might not be in your CV..."
-                    value={jobSpecificExperiences}
-                    onChange={(e) => setJobSpecificExperiences(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    This information will be used to personalize your statement with relevant experiences.
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => setActiveStep(2)}
+                  className="w-full sm:w-auto"
+                >
+                  Continue to Analysis
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
             )}
-            
-            {/* Next Button */}
-            <div className="flex justify-center">
-              <Button
-                disabled={!cv || !jobDescription}
-                onClick={() => setActiveStep(2)}
-                className="w-full sm:w-auto"
-              >
-                Continue to Analysis
-                <ChevronRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
           </div>
         );
       
@@ -448,73 +354,28 @@ const CreateStatement: React.FC = () => {
                     <FileText className="h-5 w-5 text-nhs-blue" />
                     <h3 className="text-lg font-semibold">Your Supporting Statement</h3>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          View Guidelines
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>NHS Supporting Statement Guidelines</DialogTitle>
-                          <DialogDescription>
-                            Follow these guidelines to improve your statement
-                          </DialogDescription>
-                        </DialogHeader>
-                        
-                        <div className="max-h-96 overflow-y-auto space-y-4 my-4">
-                          {guidelines.length > 0 ? (
-                            <Accordion type="single" collapsible className="w-full">
-                              {guidelines.map(guideline => (
-                                <AccordionItem key={guideline.id} value={guideline.id}>
-                                  <AccordionTrigger>{guideline.title}</AccordionTrigger>
-                                  <AccordionContent>
-                                    <div className="whitespace-pre-wrap text-sm">
-                                      {guideline.content}
-                                    </div>
-                                  </AccordionContent>
-                                </AccordionItem>
-                              ))}
-                            </Accordion>
-                          ) : (
-                            <div className="text-center py-8">
-                              <p className="text-muted-foreground">No guidelines available</p>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <DialogFooter>
-                          <Button variant="outline" type="button">
-                            Close
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                    
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={humanizeStatement}
-                      disabled={isGenerating}
-                      title="Humanize Statement"
-                    >
-                      {isGenerating ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                          <path d="M21 14c0-1.105-1.343-2-3-2s-3 .895-3 2c0 .249.068.487.19.713.683 1.295 2.81 1.287 2.81 1.287s2.127.008 2.81-1.287c.122-.226.19-.464.19-.713z"/>
-                          <path d="M12 12s-2 1-2 2c0 .5 2 1 2 2 0-1 2-2 2-2s-2-1-2-2z"/>
-                          <path d="M12 17c-1 0-3 1-3 3"/>
-                          <path d="M12 17c1 0 3 1 3 3"/>
-                          <path d="M3 10c0 1.105 1.343 2 3 2s3-.895 3-2c0-.249-.068-.487-.19-.713C8.127 7.992 6 8 6 8S3.873 7.992 3.19 9.287C3.068 9.513 3 9.751 3 10z"/>
-                          <path d="M6 10v10"/>
-                          <path d="M12 10v4"/>
-                          <path d="M18 10v4"/>
-                        </svg>
-                      )}
-                    </Button>
-                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={humanizeStatement}
+                    disabled={isGenerating}
+                    title="Humanize Statement"
+                  >
+                    {isGenerating ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                        <path d="M21 14c0-1.105-1.343-2-3-2s-3 .895-3 2c0 .249.068.487.19.713.683 1.295 2.81 1.287 2.81 1.287s2.127.008 2.81-1.287c.122-.226.19-.464.19-.713z"/>
+                        <path d="M12 12s-2 1-2 2c0 .5 2 1 2 2 0-1 2-2 2-2s-2-1-2-2z"/>
+                        <path d="M12 17c-1 0-3 1-3 3"/>
+                        <path d="M12 17c1 0 3 1 3 3"/>
+                        <path d="M3 10c0 1.105 1.343 2 3 2s3-.895 3-2c0-.249-.068-.487-.19-.713C8.127 7.992 6 8 6 8S3.873 7.992 3.19 9.287C3.068 9.513 3 9.751 3 10z"/>
+                        <path d="M6 10v10"/>
+                        <path d="M12 10v4"/>
+                        <path d="M18 10v4"/>
+                      </svg>
+                    )}
+                  </Button>
                 </div>
                 
                 <Textarea 
@@ -715,7 +576,7 @@ const CreateStatement: React.FC = () => {
         <div className="flex justify-between items-center">
           {[
             { step: 1, label: "Upload Documents" },
-            { step: 2, label: "Analyze & Compare" },
+            { step: 2, label: "Analyze CV & JD" },
             { step: 3, label: "Edit Statement" },
             { step: 4, label: "Test & Download" }
           ].map((step, index) => (
@@ -756,12 +617,12 @@ const CreateStatement: React.FC = () => {
       {/* Step Content */}
       {renderStepContent()}
       
-      {/* Progress indicator */}
-      {isGenerating && activeStep === 1 && (
+      {/* Progress indicator for statement generation */}
+      {isGenerating && activeStep === 2 && (
         <div className="mt-4">
           <Progress value={progress} className="h-2" />
           <p className="text-xs text-center text-muted-foreground mt-2">
-            {progress < 100 ? 'Analyzing your documents and creating your statement...' : 'Statement generated!'}
+            {progress < 100 ? 'Generating your statement based on CV and job description...' : 'Statement generated!'}
           </p>
         </div>
       )}

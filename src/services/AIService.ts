@@ -200,11 +200,19 @@ export class AIService {
     
     await new Promise(resolve => setTimeout(resolve, 3000));
     
+    // Extract NHS values from job description to ensure they're included in the statement
+    const nhsValues = this.extractNHSValues(jobDescription);
+    const nhsValuesText = nhsValues.length > 0 
+      ? `I strongly align with the NHS values of ${nhsValues.join(', ')}, which I've demonstrated throughout my career.`
+      : 'I strongly align with core NHS values, which I\'ve demonstrated throughout my career.';
+    
     return `I am writing to express my interest in the [Role Title] position with the NHS. With [X years] of experience in healthcare, I have developed a strong foundation in [key skills from CV that match job description].
 
 Throughout my career, I have consistently demonstrated a commitment to delivering high-quality patient care with empathy and professionalism. For example, at [Previous Position], I [specific achievement that relates to the NHS role].
 
 My experience with [relevant system/process from CV] directly aligns with your requirement for [job description requirement]. I have successfully [quantifiable achievement] which improved [relevant outcome].
+
+${nhsValuesText}
 
 I am particularly drawn to this role because of my passion for [aspect of healthcare mentioned in job description]. In my current position, I have [relevant experience that demonstrates alignment with NHS values].
 
