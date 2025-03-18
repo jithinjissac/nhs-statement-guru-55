@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -61,11 +60,10 @@ const NavBar: React.FC = () => {
             <div className="relative h-8 w-8 overflow-hidden rounded-full bg-nhs-blue text-white flex items-center justify-center">
               <span className="font-bold text-sm">NHS</span>
             </div>
-            <span className="hidden font-bold sm:inline-block">NHS Statement Guru</span>
+            <span className="hidden font-bold sm:inline-block">NHS Statement Generator</span>
           </Link>
         </div>
         
-        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-5">
           {user && (
             <>
@@ -107,7 +105,6 @@ const NavBar: React.FC = () => {
           )}
         </nav>
         
-        {/* User Menu */}
         <div className="flex items-center gap-4">
           {user ? (
             <DropdownMenu>
@@ -147,7 +144,6 @@ const NavBar: React.FC = () => {
             </Button>
           )}
           
-          {/* Mobile Menu Button */}
           <Button
             variant="ghost"
             className="md:hidden"
@@ -164,7 +160,6 @@ const NavBar: React.FC = () => {
         </div>
       </div>
       
-      {/* Mobile Navigation */}
       {mobileMenuOpen && (
         <div className="md:hidden">
           <div className="container py-4 space-y-1">
@@ -240,4 +235,3 @@ const NavBar: React.FC = () => {
 };
 
 export default NavBar;
-
