@@ -1,5 +1,6 @@
 
 import { AIService } from './AIService';
+import { StorageService } from '../StorageService';
 import { toast } from 'sonner';
 import { supabase } from "@/integrations/supabase/client";
 
@@ -14,7 +15,7 @@ export class AnthropicAPI {
       
       try {
         // Prefer localStorage directly to avoid database policy issues
-        const localStorageKeys = await AIService.getApiKeysFromLocalStorage?.() || {};
+        const localStorageKeys = StorageService.getApiKeysFromLocalStorage() || {};
         if (localStorageKeys.anthropic) {
           finalApiKey = localStorageKeys.anthropic;
           console.log("Using API key from local storage");
