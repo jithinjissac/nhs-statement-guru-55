@@ -1,15 +1,12 @@
 
 import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useDropzone } from 'react-dropzone';
-import { FileUp, FileText, Upload, Trash2, Download, Check, AlertTriangle, RefreshCw, ChevronRight, Shield } from 'lucide-react';
+import { FileUp, FileText, Upload, Trash2, Download, Check, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
 import { FileProcessingService, ProcessedFile } from '@/services/FileProcessingService';
-import { AIService } from '@/services/AIService';
-import { StorageService } from '@/services/StorageService';
 import { toast } from 'sonner';
-import { Progress } from '@/components/ui/progress';
 import CVAnalyzer from '@/components/CVAnalyzer';
 
 type ProcessingStatus = 'idle' | 'processing' | 'complete' | 'error';
@@ -20,12 +17,7 @@ const CreateStatement: React.FC = () => {
   const [jobDescription, setJobDescription] = useState<ProcessedFile | null>(null);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>('idle');
   const [generatedStatement, setGeneratedStatement] = useState<string>('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [activeStep, setActiveStep] = useState(1);
-  const [editedStatement, setEditedStatement] = useState('');
-  const [detectionResults, setDetectionResults] = useState<any[]>([]);
-  const [isDetecting, setIsDetecting] = useState(false);
 
   // CV dropzone
   const onDropCV = useCallback(async (acceptedFiles: File[]) => {
@@ -119,69 +111,17 @@ const CreateStatement: React.FC = () => {
   // Handle statement from CV Analyzer
   const handleTailoredStatement = (statement: string) => {
     setGeneratedStatement(statement);
-    setEditedStatement(statement);
     setActiveStep(3);
-  };
-  
-  // Test AI detection
-  const testAIDetection = async () => {
-    if (!editedStatement.trim()) {
-      toast.error('Please generate or enter a statement to test');
-      return;
-    }
-    
-    setIsDetecting(true);
-    
-    try {
-      const results = await AIService.detectAI(editedStatement);
-      setDetectionResults(results);
-      
-      // Check overall result
-      const isDetectedAsAI = results.some(result => result.isAI);
-      
-      if (isDetectedAsAI) {
-        toast.warning('Your statement may be detected as AI-generated. Consider humanizing it further.');
-      } else {
-        toast.success('Your statement appears human-written in all detection tests!');
-      }
-      
-      setActiveStep(4);
-    } catch (error) {
-      console.error('Error testing AI detection:', error);
-      toast.error('Failed to test AI detection. Please try again.');
-    } finally {
-      setIsDetecting(false);
-    }
-  };
-  
-  // Humanize the statement
-  const humanizeStatement = async () => {
-    if (!editedStatement.trim()) {
-      toast.error('Please generate a statement first');
-      return;
-    }
-    
-    try {
-      setIsGenerating(true);
-      const humanizedText = await AIService.humanizeText(editedStatement, 'high');
-      setEditedStatement(humanizedText);
-      toast.success('Statement humanized successfully');
-    } catch (error) {
-      console.error('Error humanizing statement:', error);
-      toast.error('Failed to humanize statement. Please try again.');
-    } finally {
-      setIsGenerating(false);
-    }
   };
   
   // Handle statement download
   const downloadStatement = () => {
-    if (!editedStatement.trim()) {
+    if (!generatedStatement.trim()) {
       toast.error('Please generate a statement first');
       return;
     }
     
-    const blob = new Blob([editedStatement], { type: 'text/plain' });
+    const blob = new Blob([generatedStatement], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -344,211 +284,52 @@ const CreateStatement: React.FC = () => {
           />
         );
       
-      case 3: // Statement Editing
+      case 3: // Final Statement
         return (
           <div className="space-y-8">
             <Card className="overflow-hidden">
+              <CardHeader>
+                <CardTitle>Your Supporting Statement</CardTitle>
+                <CardDescription>
+                  Your tailored statement based on CV and job description analysis
+                </CardDescription>
+              </CardHeader>
               <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-nhs-blue" />
-                    <h3 className="text-lg font-semibold">Your Supporting Statement</h3>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={humanizeStatement}
-                    disabled={isGenerating}
-                    title="Humanize Statement"
-                  >
-                    {isGenerating ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                        <path d="M21 14c0-1.105-1.343-2-3-2s-3 .895-3 2c0 .249.068.487.19.713.683 1.295 2.81 1.287 2.81 1.287s2.127.008 2.81-1.287c.122-.226.19-.464.19-.713z"/>
-                        <path d="M12 12s-2 1-2 2c0 .5 2 1 2 2 0-1 2-2 2-2s-2-1-2-2z"/>
-                        <path d="M12 17c-1 0-3 1-3 3"/>
-                        <path d="M12 17c1 0 3 1 3 3"/>
-                        <path d="M3 10c0 1.105 1.343 2 3 2s3-.895 3-2c0-.249-.068-.487-.19-.713C8.127 7.992 6 8 6 8S3.873 7.992 3.19 9.287C3.068 9.513 3 9.751 3 10z"/>
-                        <path d="M6 10v10"/>
-                        <path d="M12 10v4"/>
-                        <path d="M18 10v4"/>
-                      </svg>
-                    )}
-                  </Button>
-                </div>
-                
                 <Textarea 
                   className="min-h-[400px] font-medium leading-relaxed"
-                  placeholder="Your supporting statement will appear here"
-                  value={editedStatement}
-                  onChange={(e) => setEditedStatement(e.target.value)}
-                />
-              </CardContent>
-            </Card>
-            
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Button
-                variant="outline"
-                onClick={() => setActiveStep(2)}
-              >
-                Back to Analysis
-              </Button>
-              
-              <Button
-                onClick={testAIDetection}
-                disabled={!editedStatement.trim() || isDetecting}
-              >
-                {isDetecting ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  <>
-                    Test AI Detection
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        );
-      
-      case 4: // AI Detection & Download
-        return (
-          <div className="space-y-8">
-            <Card className="overflow-hidden">
-              <CardContent className="p-6 space-y-6">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-nhs-blue" />
-                  <h3 className="text-lg font-semibold">AI Detection Results</h3>
-                </div>
-                
-                {detectionResults.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {detectionResults.map((result, index) => (
-                      <Card key={index} className="overflow-hidden">
-                        <CardContent className="p-4 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <h4 className="font-medium">{result.detectorName}</h4>
-                            <div className={`analysis-pill ${result.isAI ? 'poor' : 'good'}`}>
-                              {result.isAI ? 'AI Detected' : 'Human'}
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">AI score</span>
-                              <span className="font-medium">{(result.score * 100).toFixed(1)}%</span>
-                            </div>
-                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full ${
-                                  result.isAI 
-                                    ? 'bg-red-500' 
-                                    : 'bg-green-500'
-                                }`} 
-                                style={{ width: `${result.score * 100}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          
-                          <p className="text-xs text-muted-foreground">
-                            Confidence: <span className="font-medium capitalize">{result.confidence}</span>
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">No detection results available</p>
-                  </div>
-                )}
-                
-                <div className="flex items-center justify-center gap-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg">
-                  {detectionResults.some(result => result.isAI) ? (
-                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
-                      <AlertTriangle className="h-5 w-5" />
-                      <span className="font-medium">
-                        Your statement may be detected as AI-generated. Consider further editing or humanizing it.
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-green-600 dark:text-green-500">
-                      <Check className="h-5 w-5" />
-                      <span className="font-medium">
-                        Congratulations! Your statement appears human-written in all detection tests.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="overflow-hidden">
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-nhs-blue" />
-                  <h3 className="text-lg font-semibold">Final Supporting Statement</h3>
-                </div>
-                
-                <Textarea 
-                  className="min-h-[200px] font-medium leading-relaxed"
-                  value={editedStatement}
-                  onChange={(e) => setEditedStatement(e.target.value)}
+                  value={generatedStatement}
+                  onChange={(e) => setGeneratedStatement(e.target.value)}
                 />
                 
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => setActiveStep(3)}
+                    onClick={() => setActiveStep(2)}
                   >
-                    Edit Again
-                  </Button>
-                  
-                  <Button
-                    variant="ghost"
-                    onClick={testAIDetection}
-                    disabled={isDetecting}
-                  >
-                    {isDetecting ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                    )}
-                    Re-test
+                    Back to Analysis
                   </Button>
                   
                   <Button
                     onClick={downloadStatement}
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download
+                    Download Statement
                   </Button>
                 </div>
               </CardContent>
             </Card>
             
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <div className="flex justify-center">
               <Button
                 variant="outline"
-                onClick={() => setActiveStep(3)}
-              >
-                Back to Editor
-              </Button>
-              
-              <Button
                 onClick={() => {
                   setCV(null);
                   setJobDescription(null);
                   setGeneratedStatement('');
-                  setEditedStatement('');
-                  setDetectionResults([]);
                   setActiveStep(1);
                 }}
               >
+                <RefreshCw className="h-4 w-4 mr-2" />
                 Create New Statement
               </Button>
             </div>
@@ -571,21 +352,20 @@ const CreateStatement: React.FC = () => {
         </p>
       </div>
       
-      {/* Stepper */}
+      {/* Steps Indicator */}
       <div className="mb-12">
         <div className="flex justify-between items-center">
           {[
             { step: 1, label: "Upload Documents" },
             { step: 2, label: "Analyze CV & JD" },
-            { step: 3, label: "Edit Statement" },
-            { step: 4, label: "Test & Download" }
+            { step: 3, label: "Final Statement" }
           ].map((step, index) => (
             <React.Fragment key={step.step}>
               {/* Step indicator */}
               <div className="flex flex-col items-center">
                 <div className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-medium ${
                   activeStep >= step.step 
-                    ? 'bg-nhs-blue text-white' 
+                    ? 'bg-primary text-primary-foreground' 
                     : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                 }`}>
                   {activeStep > step.step ? (
@@ -600,11 +380,11 @@ const CreateStatement: React.FC = () => {
               </div>
               
               {/* Connector line */}
-              {index < 3 && (
+              {index < 2 && (
                 <div className="flex-1 mx-2">
                   <div className={`h-0.5 ${
                     activeStep > index + 1 
-                      ? 'bg-nhs-blue' 
+                      ? 'bg-primary' 
                       : 'bg-gray-200 dark:bg-gray-700'
                   }`}></div>
                 </div>
@@ -616,16 +396,6 @@ const CreateStatement: React.FC = () => {
       
       {/* Step Content */}
       {renderStepContent()}
-      
-      {/* Progress indicator for statement generation */}
-      {isGenerating && activeStep === 2 && (
-        <div className="mt-4">
-          <Progress value={progress} className="h-2" />
-          <p className="text-xs text-center text-muted-foreground mt-2">
-            {progress < 100 ? 'Generating your statement based on CV and job description...' : 'Statement generated!'}
-          </p>
-        </div>
-      )}
     </div>
   );
 };
