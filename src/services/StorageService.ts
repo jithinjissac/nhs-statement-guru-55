@@ -169,62 +169,42 @@ export class StorageService {
   }
   
   /**
-   * Save an API key to Supabase or local storage as fallback
+   * Save an API key - prioritizing local storage as more reliable
+   * instead of dealing with Supabase policy issues
    */
   static async saveApiKey(provider: string, keyValue: string): Promise<void> {
     try {
       if (!keyValue.trim()) return;
       
-      // First try to save to Supabase
+      // Use local storage as primary storage due to Supabase policy issues
+      this.saveApiKeyToLocalStorage(provider, keyValue);
+      console.log(`Successfully saved ${provider} API key to local storage`);
+      
+      // Attempt Supabase as secondary, but don't rely on it succeeding
       try {
-        // Generate a unique ID if not provided
         const id = uuidv4();
-        
-        // Try to find an existing API key for this provider
-        const { data: existingKeys } = await supabase
+        const { error } = await supabase
           .from('api_keys')
-          .select('*')
-          .eq('name', provider);
+          .insert({
+            id: id,
+            name: provider,
+            key: keyValue,
+            active: true,
+            created_by: 'system' // Set a default value to satisfy the schema
+          });
         
-        if (existingKeys && existingKeys.length > 0) {
-          // Update existing key
-          const { error } = await supabase
-            .from('api_keys')
-            .update({
-              key: keyValue,
-              updated_at: new Date().toISOString()
-            })
-            .eq('name', provider);
-          
-          if (error) throw error;
+        if (error) {
+          console.warn(`Non-critical DB error saving API key: ${error.message}`);
         } else {
-          // Insert new key
-          // Fix: Include the required created_by field with a default value
-          const { error } = await supabase
-            .from('api_keys')
-            .insert({
-              id: id,
-              name: provider,
-              key: keyValue,
-              active: true,
-              created_by: 'system' // Set a default value to satisfy the schema requirement
-            });
-          
-          if (error) throw error;
+          console.log(`Successfully saved ${provider} API key to database as backup`);
         }
-        
-        console.log(`Successfully saved ${provider} API key to database`);
-        
       } catch (dbError) {
-        console.warn(`Database error saving API key: ${dbError}. Using local storage fallback.`);
-        // Fallback to localStorage if database operation fails
-        this.saveApiKeyToLocalStorage(provider, keyValue);
+        console.warn(`Non-critical database error saving API key: ${dbError}. Using local storage.`);
       }
     } catch (error) {
-      console.error('Error saving API key:', error);
-      // Final fallback - always ensure the key is saved somewhere
+      console.error('Error in saveApiKey:', error);
+      // Ensure key is always saved to local storage even if there's an error
       this.saveApiKeyToLocalStorage(provider, keyValue);
-      throw error;
     }
   }
   
@@ -249,32 +229,39 @@ export class StorageService {
   }
   
   /**
-   * Get all API keys from Supabase or local storage
+   * Get all API keys - prioritizing local storage for reliability
    */
   static async getApiKeys(): Promise<Record<string, string>> {
+    console.log("Getting API keys from storage");
     try {
-      // Try to get from Supabase first
+      // Always get from localStorage first as primary source
+      const localKeys = this.getApiKeysFromLocalStorage();
+      console.log("Local storage keys found:", Object.keys(localKeys));
+      
+      // Try to get from Supabase as additional source
       try {
         const { data, error } = await supabase
           .from('api_keys')
           .select('*')
           .eq('active', true);
         
-        if (error) throw error;
+        if (error) {
+          console.warn(`Non-critical DB error getting API keys: ${error.message}. Using only local storage.`);
+          return localKeys;
+        }
         
-        // Convert to record object
-        const keys: Record<string, string> = {};
+        // Merge keys from database with local keys
+        const dbKeys: Record<string, string> = {};
         (data || []).forEach(item => {
-          keys[item.name.toLowerCase()] = item.key;
+          dbKeys[item.name.toLowerCase()] = item.key;
         });
+        console.log("Database keys found:", Object.keys(dbKeys));
         
-        // Also check localStorage for any keys not in the database
-        const localKeys = this.getApiKeysFromLocalStorage();
-        return { ...localKeys, ...keys };
+        // Local keys take precedence over DB keys (more likely to be up-to-date)
+        return { ...dbKeys, ...localKeys };
       } catch (dbError) {
-        console.warn(`Database error getting API keys: ${dbError}. Using local storage fallback.`);
-        // Fallback to localStorage if database operation fails
-        return this.getApiKeysFromLocalStorage();
+        console.warn(`Non-critical database error getting API keys: ${dbError}. Using only local storage.`);
+        return localKeys;
       }
     } catch (error) {
       console.error('Failed to fetch API keys:', error);
@@ -283,12 +270,14 @@ export class StorageService {
   }
   
   /**
-   * Get API keys from local storage
+   * Get API keys from local storage - exposed as public for direct use
    */
-  private static getApiKeysFromLocalStorage(): Record<string, string> {
+  static getApiKeysFromLocalStorage(): Record<string, string> {
     try {
       const keysJSON = localStorage.getItem('api_keys');
-      return keysJSON ? JSON.parse(keysJSON) : {};
+      const keys = keysJSON ? JSON.parse(keysJSON) : {};
+      console.log("Keys from local storage:", Object.keys(keys));
+      return keys;
     } catch (error) {
       console.error('Error reading API keys from local storage:', error);
       return {};

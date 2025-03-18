@@ -13,7 +13,7 @@ export class AnthropicAPI {
       
       try {
         // Get API key from storage service
-        const apiKey = AIService.getApiKey('anthropic');
+        const apiKey = await AIService.getApiKey('anthropic');
         
         if (apiKey) {
           finalApiKey = apiKey;
@@ -45,43 +45,107 @@ export class AnthropicAPI {
       
       // Add a timeout for the fetch call
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout (increased from 60s)
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (increased from 90s)
       
       try {
         // Log the start of the API call (for debugging)
         console.log("Starting Anthropic API call with model claude-3-sonnet-20240229");
+        console.log("Message payload size:", JSON.stringify(messages).length, "bytes");
         
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': finalApiKey,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: 'claude-3-sonnet-20240229',
-            max_tokens: maxTokens,
-            messages: messages
-          }),
-          signal: controller.signal
-        });
+        // Add retry logic for network flakiness
+        let retries = 0;
+        const maxRetries = 2;
+        let lastError: Error | null = null;
         
-        // Clear the timeout since we got a response
-        clearTimeout(timeoutId);
-        
-        // Check if the response is ok (status in the range 200-299)
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
-          const errorMessage = errorData.error?.message || response.statusText;
-          console.error('Anthropic API error response:', errorData);
-          console.error('Status code:', response.status);
-          throw new Error(`Anthropic API error (${response.status}): ${errorMessage}`);
+        while (retries <= maxRetries) {
+          try {
+            if (retries > 0) {
+              console.log(`Retry attempt ${retries}/${maxRetries}`);
+            }
+            
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': finalApiKey,
+                'anthropic-version': '2023-06-01'
+              },
+              body: JSON.stringify({
+                model: 'claude-3-sonnet-20240229',
+                max_tokens: maxTokens,
+                messages: messages
+              }),
+              signal: controller.signal
+            });
+            
+            // Clear the timeout since we got a response
+            clearTimeout(timeoutId);
+            
+            // Check if the response is ok (status in the range 200-299)
+            if (!response.ok) {
+              // Try to parse the error response as JSON
+              const errorText = await response.text();
+              let errorData;
+              
+              try {
+                errorData = JSON.parse(errorText);
+              } catch (e) {
+                errorData = { error: { message: errorText || response.statusText } };
+              }
+              
+              const errorMessage = errorData.error?.message || response.statusText;
+              console.error('Anthropic API error response:', errorData);
+              console.error('Status code:', response.status);
+              
+              // Handle rate limits differently
+              if (response.status === 429) {
+                throw new Error(`Anthropic API rate limit exceeded. Please try again in a few moments.`);
+              }
+              
+              // Handle authentication issues
+              if (response.status === 401 || response.status === 403) {
+                throw new Error(`Anthropic API authentication error (${response.status}): ${errorMessage}. Please check your API key in Settings.`);
+              }
+              
+              throw new Error(`Anthropic API error (${response.status}): ${errorMessage}`);
+            }
+            
+            // Parse and return the response JSON
+            const data = await response.json();
+            console.log("Anthropic API call completed successfully");
+            return data;
+          } catch (fetchAttemptError) {
+            lastError = fetchAttemptError as Error;
+            
+            // Don't retry aborted requests or auth errors
+            if (fetchAttemptError.name === 'AbortError' || 
+                (fetchAttemptError instanceof Error && 
+                 (fetchAttemptError.message.includes('401') || 
+                  fetchAttemptError.message.includes('403')))) {
+              throw fetchAttemptError;
+            }
+            
+            // Only retry network errors or 5xx server errors
+            if (fetchAttemptError instanceof TypeError || 
+                (fetchAttemptError instanceof Error && 
+                 fetchAttemptError.message.includes('5'))) {
+              retries++;
+              if (retries <= maxRetries) {
+                // Exponential backoff: 1s, 2s, 4s...
+                const backoffMs = Math.pow(2, retries - 1) * 1000;
+                console.log(`Network/server error, waiting ${backoffMs}ms before retry...`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+                continue;
+              }
+            }
+            
+            // If we reach here, either we've exhausted retries or it's an error we don't retry
+            throw fetchAttemptError;
+          }
         }
         
-        // Parse and return the response JSON
-        const data = await response.json();
-        console.log("Anthropic API call completed successfully");
-        return data;
+        // If we somehow get here after exhausting retries
+        throw lastError || new Error('Failed to connect to Anthropic API after multiple attempts');
       } catch (fetchError) {
         // Clear the timeout if we got an error
         clearTimeout(timeoutId);
@@ -95,7 +159,7 @@ export class AnthropicAPI {
         // Check for network-related errors
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
           console.error('Network error when calling Anthropic API:', fetchError);
-          throw new Error('Network error when calling Anthropic API. Please check your internet connection and API key.');
+          throw new Error('Network error when calling Anthropic API. Please check your internet connection and try again.');
         }
         
         // Re-throw the error for other types of errors

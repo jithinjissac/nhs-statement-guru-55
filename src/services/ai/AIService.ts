@@ -1,3 +1,4 @@
+
 import { AIModelConfig } from './types';
 import { AnalysisService } from './AnalysisService';
 import { ExtractionService } from './ExtractionService';
@@ -36,28 +37,94 @@ export class AIService {
   
   private static apiKeys: Record<string, string> = {};
   private static keysInitialized = false;
+  private static initializationPromise: Promise<void> | null = null;
   
   static async initializeApiKeys(): Promise<void> {
-    try {
-      console.log('Initializing API keys...');
-      if (this.keysInitialized) {
-        console.log('API keys already initialized');
-        return;
-      }
-      
-      this.apiKeys = await StorageService.getApiKeys();
-      this.keysInitialized = true;
-      console.log('API keys initialized successfully:', Object.keys(this.apiKeys).length > 0 ? Object.keys(this.apiKeys) : 'No keys found');
-      
-      // Debug: Check if Anthropic key exists
-      if (this.apiKeys['anthropic']) {
-        console.log('Anthropic API key is available in initialized keys');
-      } else {
-        console.log('Anthropic API key not found in initialized keys');
-      }
-    } catch (error) {
-      console.error('Failed to initialize API keys:', error);
+    // Ensure we don't initialize multiple times simultaneously
+    if (this.initializationPromise) {
+      console.log('API keys initialization already in progress, waiting...');
+      return this.initializationPromise;
     }
+    
+    if (this.keysInitialized && Object.keys(this.apiKeys).length > 0) {
+      console.log('API keys already initialized and loaded');
+      return Promise.resolve();
+    }
+    
+    console.log('Initializing API keys...');
+    
+    // Create a new initialization promise
+    this.initializationPromise = new Promise(async (resolve) => {
+      try {
+        // First check if we already have keys in memory
+        if (Object.keys(this.apiKeys).length > 0) {
+          console.log('Using API keys already in memory');
+          this.keysInitialized = true;
+          return resolve();
+        }
+        
+        // Try to load from localStorage first (faster and more reliable)
+        const localStorageKeys = await StorageService.getApiKeysFromLocalStorage?.() || {};
+        
+        if (Object.keys(localStorageKeys).length > 0) {
+          console.log('Loaded API keys from localStorage:', Object.keys(localStorageKeys));
+          this.apiKeys = { ...this.apiKeys, ...localStorageKeys };
+        }
+        
+        // Then try from StorageService (which handles both DB and localStorage)
+        try {
+          const storedKeys = await StorageService.getApiKeys();
+          if (Object.keys(storedKeys).length > 0) {
+            console.log('Loaded API keys from storage service:', Object.keys(storedKeys));
+            this.apiKeys = { ...this.apiKeys, ...storedKeys };
+          }
+        } catch (storageError) {
+          console.warn('Non-critical error getting API keys from storage service:', storageError);
+          // Continue with keys from localStorage if any
+        }
+        
+        // Fallback to environment variables if needed (for development)
+        if (Object.keys(this.apiKeys).length === 0) {
+          console.log('No stored API keys found, checking environment variables');
+          this.checkEnvironmentVariables();
+        }
+        
+        // Debug check for Anthropic key
+        if (this.apiKeys['anthropic']) {
+          console.log('Anthropic API key is available in initialized keys');
+        } else {
+          console.log('Anthropic API key not found in initialized keys');
+        }
+        
+        this.keysInitialized = true;
+      } catch (error) {
+        console.error('Failed to initialize API keys:', error);
+        // Still consider initialization complete even with errors
+        this.keysInitialized = true;
+      } finally {
+        this.initializationPromise = null;
+        resolve();
+      }
+    });
+    
+    return this.initializationPromise;
+  }
+  
+  private static checkEnvironmentVariables(): void {
+    // Check for environment variables
+    const providers = ['anthropic', 'openai', 'mistral'];
+    
+    providers.forEach(provider => {
+      const envKey = import.meta.env[`VITE_${provider.toUpperCase()}_API_KEY`];
+      if (envKey) {
+        console.log(`Found ${provider} API key in environment variables`);
+        this.apiKeys[provider] = envKey;
+        // Also save it to storage for future use
+        StorageService.saveApiKey(provider, envKey).catch(err => {
+          console.warn(`Non-critical error saving environment API key to storage:`, err);
+        });
+      }
+    });
   }
   
   static setApiKey(provider: string, key: string): void {
@@ -74,18 +141,16 @@ export class AIService {
     // Save to storage
     StorageService.saveApiKey(providerKey, key)
       .catch(error => {
-        console.error('Error saving API key to database:', error);
-        console.log('API key saved to memory but not persisted');
+        console.error('Non-critical error saving API key to storage:', error);
+        console.log('API key saved to memory but may not be persisted');
       });
   }
   
-  static getApiKey(provider: string): string | null {
+  static async getApiKey(provider: string): Promise<string | null> {
+    // Ensure initialization is complete
     if (!this.keysInitialized) {
       console.log('API keys not initialized yet, initializing now...');
-      // We need to initialize immediately if not done yet
-      this.initializeApiKeys().catch(error => {
-        console.error('Error initializing API keys:', error);
-      });
+      await this.initializeApiKeys();
     }
     
     const providerKey = provider.toLowerCase();
@@ -122,15 +187,16 @@ export class AIService {
   // Delegate analysis methods to the specialized services
   static async analyzeCV(...args: Parameters<typeof AnalysisService.analyzeCV>) {
     // Make sure API keys are loaded
-    if (!this.keysInitialized || Object.keys(this.apiKeys).length === 0) {
+    if (!this.keysInitialized) {
       console.log('API keys not fully loaded, initializing before analysis...');
       await this.initializeApiKeys();
     }
     
     // After initialization, check if we have the Anthropic key
-    const anthropicKey = this.getApiKey('anthropic');
+    const anthropicKey = await this.getApiKey('anthropic');
     if (!anthropicKey) {
       console.warn('No Anthropic API key found after initialization');
+      throw new Error('Anthropic API key not found. Please add it in Settings page.');
     } else {
       console.log('Anthropic API key is available for analysis');
     }
@@ -140,9 +206,16 @@ export class AIService {
   
   static async generateTailoredStatement(...args: Parameters<typeof AnalysisService.generateTailoredStatement>) {
     // Make sure API keys are loaded
-    if (!this.keysInitialized || Object.keys(this.apiKeys).length === 0) {
+    if (!this.keysInitialized) {
       await this.initializeApiKeys();
     }
+    
+    // Check for anthropic key
+    const anthropicKey = await this.getApiKey('anthropic');
+    if (!anthropicKey) {
+      throw new Error('Anthropic API key not found. Please add it in Settings page.');
+    }
+    
     return AnalysisService.generateTailoredStatement(...args);
   }
   

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AIService, CVAnalysisResult } from '@/services/ai';
@@ -8,7 +9,7 @@ import LoadingSpinner from './cv-analyzer/LoadingSpinner';
 import AnalysisStep from './cv-analyzer/AnalysisStep';
 import TailoredStatement from './cv-analyzer/TailoredStatement';
 import { Button } from './ui/button';
-import { AlertTriangle, Settings, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Settings, ExternalLink, Wifi, AlertCircle, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface CVAnalyzerProps {
@@ -31,6 +32,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (cv && jobDescription && !analysis) {
@@ -73,11 +75,15 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       setAnalysis(result);
       setActiveStep(2);
       toast.success('CV analysis completed successfully');
+      // Reset retry count on success
+      setRetryCount(0);
     } catch (error) {
       console.error('Error analyzing CV:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setError(errorMessage);
       toast.error('Failed to analyze CV. Please try again.');
+      // Increment retry count
+      setRetryCount(prev => prev + 1);
     } finally {
       setIsAnalyzing(false);
     }
@@ -127,11 +133,15 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
       setActiveStep(3);
       toast.success('Tailored statement generated successfully');
       onStatementGenerated(result.statement);
+      // Reset retry count on success
+      setRetryCount(0);
     } catch (error) {
       console.error('Error generating statement:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       setError(errorMessage);
       toast.error('Failed to generate statement. Please try again.');
+      // Increment retry count
+      setRetryCount(prev => prev + 1);
     } finally {
       setIsGenerating(false);
     }
@@ -143,11 +153,22 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
 
   const renderError = () => {
     const isApiKeyError = error?.toLowerCase().includes('api key') || 
-                          error?.toLowerCase().includes('anthropic');
+                          error?.toLowerCase().includes('anthropic') ||
+                          error?.toLowerCase().includes('authentication') ||
+                          error?.toLowerCase().includes('auth') ||
+                          error?.toLowerCase().includes('401') ||
+                          error?.toLowerCase().includes('403');
+                          
     const isNetworkError = error?.toLowerCase().includes('network') || 
                            error?.toLowerCase().includes('fetch') || 
-                           error?.toLowerCase().includes('timeout');
-                          
+                           error?.toLowerCase().includes('timeout') ||
+                           error?.toLowerCase().includes('connection') ||
+                           error?.toLowerCase().includes('internet');
+                           
+    const isRateLimitError = error?.toLowerCase().includes('rate limit') ||
+                             error?.toLowerCase().includes('too many requests') ||
+                             error?.toLowerCase().includes('429');
+                             
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
         <div className="flex flex-col items-center gap-3">
@@ -157,22 +178,53 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
           
           {isApiKeyError ? (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
-              <p className="font-medium mb-2">API Key Issue Detected</p>
-              <p>Please check that you've entered a valid Anthropic API key in Settings.</p>
-              <a 
-                href="https://console.anthropic.com/account/keys" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline flex items-center mt-2"
-              >
-                Get an Anthropic API key
-                <ExternalLink className="h-3 w-3 ml-1" />
-              </a>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <p className="font-medium">API Key Issue Detected</p>
+              </div>
+              <p className="mb-2">Please check that you've entered a valid Anthropic API key in Settings.</p>
+              <p className="text-xs mb-2">The key should start with "sk-ant-api".</p>
+              <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                <a 
+                  href="https://console.anthropic.com/account/keys" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline flex items-center gap-1 text-sm"
+                >
+                  Get an Anthropic API key
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={navigateToSettings}
+                  className="text-xs"
+                >
+                  <Settings className="h-3 w-3 mr-1" />
+                  Go to Settings
+                </Button>
+              </div>
             </div>
           ) : isNetworkError ? (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
-              <p className="font-medium mb-2">Network Issue Detected</p>
+              <div className="flex items-center gap-2 mb-2">
+                <Wifi className="h-4 w-4 flex-shrink-0" />
+                <p className="font-medium">Network Issue Detected</p>
+              </div>
               <p>There seems to be a problem connecting to the Anthropic API. Please check your internet connection and try again.</p>
+              {retryCount > 1 && (
+                <p className="mt-2 text-xs">
+                  If this issue persists after multiple attempts, it may be a temporary problem with the Anthropic API servers.
+                </p>
+              )}
+            </div>
+          ) : isRateLimitError ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-amber-800 text-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Info className="h-4 w-4 flex-shrink-0" />
+                <p className="font-medium">Rate Limit Exceeded</p>
+              </div>
+              <p>You've sent too many requests to the Anthropic API in a short time. Please wait a moment before trying again.</p>
             </div>
           ) : (
             <p className="text-sm text-gray-600 mb-4">
@@ -186,7 +238,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
             </Button>
             <Button onClick={navigateToSettings} variant="outline">
               <Settings className="h-4 w-4 mr-2" />
-              Go to Settings
+              API Settings
             </Button>
           </div>
         </div>
@@ -263,4 +315,3 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
 };
 
 export default CVAnalyzer;
-
