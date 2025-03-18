@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,6 +35,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
+import CVAnalyzer from '@/components/CVAnalyzer';
 
 type ProcessingStatus = 'idle' | 'processing' | 'complete' | 'error';
 
@@ -135,6 +135,13 @@ const CreateStatement: React.FC = () => {
   const handleRemoveJobDescription = () => {
     setJobDescription(null);
     toast.info('Job description removed');
+  };
+  
+  // Handle statement from CV Analyzer
+  const handleTailoredStatement = (statement: string) => {
+    setGeneratedStatement(statement);
+    setEditedStatement(statement);
+    setActiveStep(2);
   };
   
   // Generate the statement
@@ -432,147 +439,169 @@ const CreateStatement: React.FC = () => {
             </CardContent>
           </Card>
           
-          {/* Generation Options */}
-          <Card className="md:col-span-2 hover-lift overflow-hidden">
-            <CardContent className="p-6">
-              <div className="mb-4 flex items-center gap-2">
-                <Settings className="h-5 w-5 text-nhs-blue" />
-                <h3 className="text-lg font-semibold">Statement Generation Options</h3>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Tone</Label>
-                    <Select 
-                      value={generationOptions.tone} 
-                      onValueChange={(value: any) => setGenerationOptions({
-                        ...generationOptions,
-                        tone: value
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select tone" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="professional">Professional</SelectItem>
-                        <SelectItem value="conversational">Conversational</SelectItem>
-                        <SelectItem value="enthusiastic">Enthusiastic</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Professional is formal and polished, conversational is warm and approachable, enthusiastic shows passion.
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Detail Level</Label>
-                    <Select 
-                      value={generationOptions.detailLevel} 
-                      onValueChange={(value: any) => setGenerationOptions({
-                        ...generationOptions,
-                        detailLevel: value
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select detail level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="concise">Concise</SelectItem>
-                        <SelectItem value="detailed">Detailed</SelectItem>
-                        <SelectItem value="comprehensive">Comprehensive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Concise is brief, detailed includes specific examples, comprehensive is thorough and extensive.
-                    </p>
-                  </div>
-                </div>
+          {/* Advanced Analysis (New) */}
+          {cv && jobDescription && (
+            <div className="md:col-span-2 mt-6">
+              <Tabs defaultValue="standard">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="standard">Standard Generation</TabsTrigger>
+                  <TabsTrigger value="advanced">Advanced Analysis</TabsTrigger>
+                </TabsList>
                 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Humanization Level</Label>
-                    <div className="pt-2">
-                      <Slider
-                        defaultValue={[2]}
-                        max={3}
-                        min={1}
-                        step={1}
-                        onValueChange={(value) => {
-                          const level = value[0];
-                          let humanizeLevel: 'low' | 'medium' | 'high' = 'medium';
-                          if (level === 1) humanizeLevel = 'low';
-                          if (level === 2) humanizeLevel = 'medium';
-                          if (level === 3) humanizeLevel = 'high';
-                          setGenerationOptions({
-                            ...generationOptions,
-                            humanizeLevel
-                          });
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Low</span>
-                      <span>Medium</span>
-                      <span>High</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Higher humanization makes the statement more natural but may reduce precision.
-                    </p>
-                  </div>
+                <TabsContent value="standard">
+                  {/* Generation Options */}
+                  <Card className="hover-lift overflow-hidden">
+                    <CardContent className="p-6">
+                      <div className="mb-4 flex items-center gap-2">
+                        <Settings className="h-5 w-5 text-nhs-blue" />
+                        <h3 className="text-lg font-semibold">Statement Generation Options</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Tone</Label>
+                            <Select 
+                              value={generationOptions.tone} 
+                              onValueChange={(value: any) => setGenerationOptions({
+                                ...generationOptions,
+                                tone: value
+                              })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select tone" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="professional">Professional</SelectItem>
+                                <SelectItem value="conversational">Conversational</SelectItem>
+                                <SelectItem value="enthusiastic">Enthusiastic</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Professional is formal and polished, conversational is warm and approachable, enthusiastic shows passion.
+                            </p>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label>Detail Level</Label>
+                            <Select 
+                              value={generationOptions.detailLevel} 
+                              onValueChange={(value: any) => setGenerationOptions({
+                                ...generationOptions,
+                                detailLevel: value
+                              })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select detail level" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="concise">Concise</SelectItem>
+                                <SelectItem value="detailed">Detailed</SelectItem>
+                                <SelectItem value="comprehensive">Comprehensive</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Concise is brief, detailed includes specific examples, comprehensive is thorough and extensive.
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label>Humanization Level</Label>
+                            <div className="pt-2">
+                              <Slider
+                                defaultValue={[2]}
+                                max={3}
+                                min={1}
+                                step={1}
+                                onValueChange={(value) => {
+                                  const level = value[0];
+                                  let humanizeLevel: 'low' | 'medium' | 'high' = 'medium';
+                                  if (level === 1) humanizeLevel = 'low';
+                                  if (level === 2) humanizeLevel = 'medium';
+                                  if (level === 3) humanizeLevel = 'high';
+                                  setGenerationOptions({
+                                    ...generationOptions,
+                                    humanizeLevel
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Low</span>
+                              <span>Medium</span>
+                              <span>High</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Higher humanization makes the statement more natural but may reduce precision.
+                            </p>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label>NHS Values Focus</Label>
+                              <Switch
+                                checked={generationOptions.focusAreas.includes('nhs-values')}
+                                onCheckedChange={(checked) => {
+                                  const updatedAreas = [...generationOptions.focusAreas];
+                                  if (checked) {
+                                    updatedAreas.push('nhs-values');
+                                  } else {
+                                    const index = updatedAreas.indexOf('nhs-values');
+                                    if (index > -1) {
+                                      updatedAreas.splice(index, 1);
+                                    }
+                                  }
+                                  setGenerationOptions({
+                                    ...generationOptions,
+                                    focusAreas: updatedAreas
+                                  });
+                                }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Emphasize NHS values like respect, dignity, compassion, and commitment to quality.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                   
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>NHS Values Focus</Label>
-                      <Switch
-                        checked={generationOptions.focusAreas.includes('nhs-values')}
-                        onCheckedChange={(checked) => {
-                          const updatedAreas = [...generationOptions.focusAreas];
-                          if (checked) {
-                            updatedAreas.push('nhs-values');
-                          } else {
-                            const index = updatedAreas.indexOf('nhs-values');
-                            if (index > -1) {
-                              updatedAreas.splice(index, 1);
-                            }
-                          }
-                          setGenerationOptions({
-                            ...generationOptions,
-                            focusAreas: updatedAreas
-                          });
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Emphasize NHS values like respect, dignity, compassion, and commitment to quality.
-                    </p>
+                  {/* Generate Button */}
+                  <div className="flex justify-center mt-4">
+                    <Button 
+                      size="lg" 
+                      onClick={generateStatement}
+                      disabled={!cv || !jobDescription || isGenerating}
+                      className="w-full md:w-auto"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Generating Statement...
+                        </>
+                      ) : (
+                        <>
+                          Generate Supporting Statement
+                          <ChevronRight className="h-4 w-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          {/* Generate Button */}
-          <div className="md:col-span-2 flex justify-center mt-4">
-            <Button 
-              size="lg" 
-              onClick={generateStatement}
-              disabled={!cv || !jobDescription || isGenerating}
-              className="w-full md:w-auto"
-            >
-              {isGenerating ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Generating Statement...
-                </>
-              ) : (
-                <>
-                  Generate Supporting Statement
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </>
-              )}
-            </Button>
-          </div>
+                </TabsContent>
+                
+                <TabsContent value="advanced">
+                  <CVAnalyzer 
+                    cv={cv?.content || ''}
+                    jobDescription={jobDescription?.content || ''}
+                    onStatementGenerated={handleTailoredStatement}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
           
           {/* Progress indicator */}
           {isGenerating && (

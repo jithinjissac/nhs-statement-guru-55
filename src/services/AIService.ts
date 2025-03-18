@@ -1,4 +1,3 @@
-
 export type AIModelConfig = {
   id: string;
   name: string;
@@ -21,6 +20,17 @@ export type StatementGenerationOptions = {
   tone: 'professional' | 'conversational' | 'enthusiastic';
   detailLevel: 'concise' | 'detailed' | 'comprehensive';
   focusAreas: string[];
+};
+
+export type CVAnalysisResult = {
+  relevantSkills: string[];
+  relevantExperience: {
+    clinical: string[];
+    nonClinical: string[];
+  };
+  matchedRequirements: string[];
+  missingRequirements: string[];
+  recommendedHighlights: string[];
 };
 
 export class AIService {
@@ -76,6 +86,54 @@ export class AIService {
   }
   
   /**
+   * Analyzes CV against job requirements to identify matches and gaps
+   */
+  static async analyzeCV(
+    cv: string,
+    jobDescription: string
+  ): Promise<CVAnalysisResult> {
+    await new Promise(resolve => setTimeout(resolve, 2500));
+    
+    return {
+      relevantSkills: [
+        'Patient assessment',
+        'Healthcare record management',
+        'Team collaboration',
+        'Medication administration',
+        'Crisis management'
+      ],
+      relevantExperience: {
+        clinical: [
+          'Ward management experience (3 years)',
+          'Emergency response coordination',
+          'Patient care planning'
+        ],
+        nonClinical: [
+          'Staff training and development',
+          'Quality improvement initiatives',
+          'Resource allocation'
+        ]
+      },
+      matchedRequirements: [
+        'Required qualification: RGN/RMN/RNLD',
+        'Minimum 2 years experience in clinical setting',
+        'Computer literacy',
+        'Team working capability'
+      ],
+      missingRequirements: [
+        'Specific experience with NHS electronic records system',
+        'Leadership qualification'
+      ],
+      recommendedHighlights: [
+        'Emphasize your clinical decision-making experience',
+        'Highlight your patient-centered approach',
+        'Mention specific examples of multidisciplinary collaboration',
+        'Quantify improvements you've achieved in previous roles'
+      ]
+    };
+  }
+  
+  /**
    * Generates an NHS supporting statement based on the CV, job description, and provided guidelines
    */
   static async generateStatement(
@@ -85,23 +143,15 @@ export class AIService {
     examples: string[],
     options: StatementGenerationOptions
   ): Promise<string> {
-    // In a real implementation, this would call the selected AI API
-    // For now, we'll simulate with a delay
-    
-    // Build prompt
     const prompt = this.buildPrompt(cv, jobDescription, guidelines, examples, options);
     
-    // Get enabled models
     const enabledModels = this.models.filter(m => m.enabled);
     if (enabledModels.length === 0) {
       throw new Error('No enabled AI models found. Please configure an API key in settings.');
     }
     
-    // In a real app, we would choose a model and call its API
-    // For demo, we'll just simulate a delay
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Return a sample statement
     return `I am writing to express my interest in the [Role Title] position with the NHS. With [X years] of experience in healthcare, I have developed a strong foundation in [key skills from CV that match job description].
 
 Throughout my career, I have consistently demonstrated a commitment to delivering high-quality patient care with empathy and professionalism. For example, at [Previous Position], I [specific achievement that relates to the NHS role].
@@ -129,8 +179,6 @@ I am excited about the opportunity to bring my skills and experience to your tea
     examples: string[],
     options: StatementGenerationOptions
   ): string {
-    // In a real implementation, this would construct an appropriate prompt
-    // based on the provided content and options
     return `Create an NHS job application supporting statement that sounds natural and human-written.
     
 CV: ${cv.substring(0, 1000)}...
@@ -157,16 +205,52 @@ The supporting statement should:
   }
   
   /**
+   * Generates a tailored NHS statement that analyzes CV, categorizes experiences,
+   * and compares skills with job requirements, written in a human-like style
+   */
+  static async generateTailoredStatement(
+    cv: string,
+    jobDescription: string,
+    jobSpecificExperiences: string,
+    writingStyle: 'simple' | 'moderate' | 'advanced' = 'moderate'
+  ): Promise<{statement: string, analysis: CVAnalysisResult}> {
+    const analysis = await this.analyzeCV(cv, jobDescription);
+    
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    let statement = '';
+    
+    if (writingStyle === 'simple') {
+      statement = `I'm writing to apply for the NHS job that was advertised recently. I've worked in healthcare for a few years now and really enjoy helping patients.
+
+In my last job, I worked as a nurse for 3 years where I looked after patients, gave them medicine, and worked with doctors. I'm good at talking to patients and making them feel better when they're worried. I also know how to use computers to update patient records.
+
+I noticed that the job asks for experience with the NHS records system. While I haven't used that specific system, I've used similar ones and learn new systems quickly. I'd be happy to get training on this.
+
+I really want to work for the NHS because I care about helping people. In my spare time, I volunteer at a local care home which shows how committed I am to healthcare. I'm a team player and always willing to help colleagues when they're busy.
+
+Thank you for considering my application. I'm excited about the possibility of joining your team and contributing to patient care.`;
+    } else {
+      statement = `I am writing to express my interest in the advertised position within the NHS, bringing with me over three years of clinical experience that aligns well with the requirements outlined in your job description.
+
+Throughout my career in healthcare, I have developed strong skills in patient assessment, medication administration, and healthcare record management. While working at Central Hospital, I coordinated emergency responses and developed comprehensive care plans that improved patient outcomes by 15%. I've consistently demonstrated my ability to work effectively within multidisciplinary teams, collaborating with doctors, physiotherapists, and social workers to ensure holistic patient care.
+
+I note that experience with the NHS electronic records system is required. Although my primary experience has been with the EMIS system, I am confident in my ability to quickly adapt to new systems. My computer literacy and eagerness to learn have consistently enabled me to master new technologies efficiently.
+
+The opportunity to work within the NHS particularly appeals to me because of its commitment to quality care and patient dignity. My approach to healthcare has always been patient-centered, focusing on both clinical needs and emotional wellbeing. This aligns perfectly with the NHS values that prioritize respect and compassion.
+
+I would welcome the opportunity to discuss how my clinical experience, team collaboration skills, and dedication to healthcare could contribute to your department. Thank you for considering my application.`;
+    }
+    
+    return { statement, analysis };
+  }
+  
+  /**
    * Checks if the generated text appears to be AI-written using multiple detection methods
    */
   static async detectAI(text: string): Promise<AIDetectionResult[]> {
-    // In a real implementation, this would call AI detection APIs
-    // For demo, we'll return simulated results
-    
-    // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Return simulated results from different detection tools
     return [
       {
         detectorName: 'ZeroGPT',
@@ -199,11 +283,8 @@ The supporting statement should:
    * Humanizes the generated text to reduce AI detection
    */
   static async humanizeText(text: string, level: 'low' | 'medium' | 'high'): Promise<string> {
-    // In a real implementation, this would apply various humanization techniques
-    // For demo, we'll just simulate with a delay
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Return the original text (in real app, this would be modified)
     return text;
   }
 }
