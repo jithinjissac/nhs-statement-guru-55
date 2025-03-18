@@ -53,8 +53,24 @@ export class AnthropicAPI {
         console.log("Starting Anthropic API call with model claude-3-sonnet-20240229");
         
         // Validate messages format
-        if (!Array.isArray(messages) || messages.length === 0) {
-          throw new Error("Messages must be a non-empty array");
+        if (!Array.isArray(messages)) {
+          throw new Error("Messages must be an array");
+        }
+        
+        if (messages.length === 0) {
+          throw new Error("Messages array cannot be empty");
+        }
+        
+        // Validate each message in the array
+        for (let i = 0; i < messages.length; i++) {
+          const message = messages[i];
+          if (!message.role || !message.content) {
+            throw new Error(`Invalid message at index ${i}: missing role or content`);
+          }
+          
+          if (typeof message.content !== 'string') {
+            throw new Error(`Invalid message content at index ${i}: content must be a string`);
+          }
         }
         
         // Prepare the payload

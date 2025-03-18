@@ -16,7 +16,6 @@ serve(async (req) => {
 
   try {
     // Get the anthropic key from the environment variables
-    // This is the key stored in Supabase's Edge Function secrets
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     
     if (!apiKey) {
@@ -34,6 +33,7 @@ serve(async (req) => {
     let requestData;
     try {
       requestData = await req.json();
+      console.log("Request parsed successfully");
     } catch (parseError) {
       console.error("Error parsing request JSON:", parseError);
       return new Response(
@@ -44,6 +44,9 @@ serve(async (req) => {
         }
       );
     }
+
+    // Log the full request data for debugging
+    console.log("Full request data:", JSON.stringify(requestData).substring(0, 500) + "...");
 
     // Validate required fields
     if (!requestData.model) {
@@ -57,10 +60,10 @@ serve(async (req) => {
       );
     }
 
-    if (!requestData.messages || !Array.isArray(requestData.messages) || requestData.messages.length === 0) {
+    if (!requestData.messages || !Array.isArray(requestData.messages)) {
       console.error("Missing or invalid required field: messages");
       return new Response(
-        JSON.stringify({ error: "Missing or invalid required field: messages" }),
+        JSON.stringify({ error: "Missing or invalid required field: messages (must be an array)" }),
         { 
           status: 400, 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -68,15 +71,56 @@ serve(async (req) => {
       );
     }
 
+    if (requestData.messages.length === 0) {
+      console.error("Empty messages array");
+      return new Response(
+        JSON.stringify({ error: "Messages array cannot be empty" }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
+
+    // Validate each message in the messages array
+    for (let i = 0; i < requestData.messages.length; i++) {
+      const message = requestData.messages[i];
+      if (!message.role || !message.content) {
+        console.error(`Invalid message at index ${i}: missing role or content`);
+        return new Response(
+          JSON.stringify({ 
+            error: `Invalid message at index ${i}: each message must have 'role' and 'content' properties`,
+            message: message
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+      
+      if (typeof message.content !== 'string') {
+        console.error(`Invalid message content at index ${i}: not a string`);
+        return new Response(
+          JSON.stringify({ 
+            error: `Invalid message content at index ${i}: content must be a string`,
+            contentType: typeof message.content
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+    }
+
     // Log request details
-    console.log("Received request for Anthropic API:", {
+    console.log("Received valid request for Anthropic API:", {
       model: requestData.model,
-      messageCount: requestData.messages?.length || 0,
-      maxTokens: requestData.max_tokens,
+      messageCount: requestData.messages.length,
+      maxTokens: requestData.max_tokens || "not specified",
       responseFormat: requestData.response_format || "not specified",
-      firstMessagePreview: requestData.messages && requestData.messages.length > 0 
-        ? requestData.messages[0].content.substring(0, 100) + "..." 
-        : "no messages"
+      firstMessagePreview: requestData.messages[0].content.substring(0, 100) + "..." 
     });
 
     // Ensure response_format is set for JSON output
@@ -118,11 +162,31 @@ serve(async (req) => {
     // Get the response data
     let responseData;
     try {
-      responseData = await anthropicResponse.json();
-    } catch (jsonError) {
-      console.error("Error parsing Anthropic API response:", jsonError);
+      const responseText = await anthropicResponse.text();
+      console.log("Raw response text:", responseText.substring(0, 500) + "...");
+      
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error("Error parsing Anthropic API response:", jsonError);
+        console.error("Response status:", anthropicResponse.status);
+        console.error("Response text:", responseText);
+        return new Response(
+          JSON.stringify({ 
+            error: "Error parsing Anthropic API response",
+            responseStatus: anthropicResponse.status,
+            responseText: responseText.substring(0, 1000)
+          }),
+          { 
+            status: 502, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+    } catch (textError) {
+      console.error("Error reading Anthropic API response body:", textError);
       return new Response(
-        JSON.stringify({ error: "Error parsing Anthropic API response" }),
+        JSON.stringify({ error: "Error reading Anthropic API response body" }),
         { 
           status: 502, 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
