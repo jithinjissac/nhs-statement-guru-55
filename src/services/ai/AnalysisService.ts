@@ -305,6 +305,7 @@ Return ONLY a valid JSON object with the following structure (no extra text befo
   
   /**
    * Generates a tailored supporting statement based on CV and job description
+   * with enhanced human-like qualities and NHS guidelines incorporation
    */
   static async generateTailoredStatement(
     cv: string,
@@ -322,7 +323,19 @@ Return ONLY a valid JSON object with the following structure (no extra text befo
         (stage, percent) => progressCallback?.(`CV Analysis: ${stage}`, Math.floor(percent * 0.4))
       );
       
-      progressCallback?.('Preparing statement generation', 45);
+      progressCallback?.('Retrieving NHS resources', 50);
+      // Get NHS guidelines and sample statements to enhance statement quality
+      const { guidelines, sampleStatements } = await AnthropicAPI.getNHSStatementResources();
+      
+      // Extract relevant guidelines content
+      const guidelineContent = guidelines.map(g => `${g.title}: ${g.content.substring(0, 300)}...`).join('\n\n');
+      
+      // Extract relevant sample statement content based on role similarities
+      const roleKeywords = this.extractRoleKeywords(jobDescription);
+      const relevantSamples = this.findRelevantSamples(sampleStatements, roleKeywords, 2);
+      const samplesContent = relevantSamples.map(s => `${s.title}: ${s.content.substring(0, 300)}...`).join('\n\n');
+      
+      progressCallback?.('Preparing statement generation', 55);
       
       // Determine the audience level based on style
       let audienceLevel = 'GCSE level (simple, clear language)';
@@ -344,7 +357,7 @@ Return ONLY a valid JSON object with the following structure (no extra text befo
       const highlights = analysis.recommendedHighlights.join('\n- ');
       const nhsValues = analysis.nhsValues.join(', ');
       
-      // Create the prompt
+      // Create the enhanced prompt for human-like statement generation
       const messages = [
         {
           role: "user",
@@ -373,21 +386,33 @@ ${nhsValues}
 ${additionalInfo ? `Additional Information Provided by Applicant:
 ${additionalInfo}` : ''}
 
-Instructions:
+NHS Statement Guidelines to Follow:
+${guidelineContent}
+
+Sample Statements for Reference:
+${samplesContent}
+
+Instructions for Human-Like Statement Generation:
 1. Write a compelling supporting statement at ${audienceLevel} reading level
-2. Focus on how the applicant's experience and skills match the job requirements
-3. Address the NHS values specifically
-4. Don't mention "CV" or "resume" directly; write in first person ("I have...")
-5. Include specific achievements with numbers where possible
-6. Acknowledge and address any gaps in meeting requirements
-7. Keep the statement between 500-800 words
-8. Format with clear paragraphs
-9. Do not use bullet points; write in proper prose
-10. Start with a brief introduction about why you're interested in the role`
+2. Use varied sentence structures, mixing concise and detailed sentences
+3. Ensure natural flow and professional tone with smooth transitions
+4. Create a personalized statement specific to this NHS role
+5. Reflect genuine personal motivations and relevant real-life experiences
+6. Begin with a strong introduction explaining interest in the role
+7. Clearly highlight key qualifications, experience, and NHS-related skills
+8. Use first-person perspective with authentic professional expression
+9. Include concrete examples of compassionate care, teamwork, or problem-solving
+10. Naturally integrate NHS values (compassion, respect, integrity, teamwork)
+11. Avoid repetitive, robotic phrasing and generate dynamic, engaging language
+12. End with a compelling conclusion emphasizing enthusiasm and commitment
+13. Keep the statement between 500-800 words with clear paragraphs
+14. Ensure the text sounds like a real applicant's personal expression
+15. Do not use bullet points; write in proper prose
+16. Do not mention "CV" or "resume" directly; write in first person ("I have...")`
         }
       ];
       
-      progressCallback?.('Generating statement', 50);
+      progressCallback?.('Generating statement', 60);
       const response = await AnthropicAPI.callAnthropic(messages, 4000);
       progressCallback?.('Processing AI response', 90);
       
@@ -404,5 +429,62 @@ Instructions:
       console.error('Error generating statement:', error);
       throw error;
     }
+  }
+
+  /**
+   * Extract role keywords from job description
+   */
+  private static extractRoleKeywords(jobDescription: string): string[] {
+    const commonRoles = [
+      'nurse', 'doctor', 'consultant', 'healthcare assistant', 'hca', 
+      'administrator', 'manager', 'therapist', 'technician', 'midwife',
+      'physiotherapist', 'dietitian', 'radiographer', 'pharmacist',
+      'occupational therapist', 'mental health', 'social worker'
+    ];
+    
+    // Extract role from job description
+    const keywords: string[] = [];
+    const lowercaseJD = jobDescription.toLowerCase();
+    
+    commonRoles.forEach(role => {
+      if (lowercaseJD.includes(role)) {
+        keywords.push(role);
+      }
+    });
+    
+    // Extract any department information
+    const departments = [
+      'emergency', 'a&e', 'cardiology', 'neurology', 'oncology', 
+      'pediatrics', 'paediatrics', 'surgery', 'orthopedics', 'orthopaedics',
+      'radiology', 'pathology', 'icu', 'intensive care', 'outpatient'
+    ];
+    
+    departments.forEach(dept => {
+      if (lowercaseJD.includes(dept)) {
+        keywords.push(dept);
+      }
+    });
+    
+    return keywords;
+  }
+  
+  /**
+   * Find relevant sample statements based on role keywords
+   */
+  private static findRelevantSamples(samples: any[], keywords: string[], limit: number) {
+    // Score each sample by keyword matches
+    const scoredSamples = samples.map(sample => {
+      const sampleText = (sample.title + ' ' + sample.content).toLowerCase();
+      const score = keywords.reduce((total, keyword) => {
+        return total + (sampleText.includes(keyword) ? 1 : 0);
+      }, 0);
+      
+      return { ...sample, score };
+    });
+    
+    // Sort by score and return the top matches
+    return scoredSamples
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
   }
 }

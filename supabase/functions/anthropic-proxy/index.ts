@@ -69,9 +69,6 @@ serve(async (req) => {
       );
     }
 
-    // Remove apiKey from the payload before sending to Anthropic
-    const { apiKey: _, ...cleanPayload } = body;
-
     // Get the payload from the body or create a default one
     const payload = body.payload || {};
     
@@ -95,75 +92,126 @@ serve(async (req) => {
       }
     }
 
+    // Log request info
     console.log(`Making request to Anthropic API with ${requestPayload.messages.length} messages`);
     console.log(`Model: ${requestPayload.model}`);
+    console.log(`Payload size: ${JSON.stringify(requestPayload).length} bytes`);
 
-    // Make the request to Anthropic API with improved error handling
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify(requestPayload)
-    });
+    // Make the request to Anthropic API with improved error handling and timeout
+    let controller;
+    let timeoutId;
+    
+    try {
+      // Set up a timeout for the fetch request
+      controller = new AbortController();
+      const timeoutMs = 60000; // 60 second timeout
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(requestPayload),
+        signal: controller.signal
+      });
+      
+      // Clear the timeout as we got a response
+      clearTimeout(timeoutId);
 
-    // Check if response is ok
-    if (!response.ok) {
-      const errorStatus = response.status;
-      let errorData;
-      
-      try {
-        // Try to parse error response as JSON
-        errorData = await response.json();
-      } catch {
-        // If not JSON, get as text
-        const errorText = await response.text();
-        errorData = { message: errorText || 'Unknown error from Anthropic API' };
-      }
-      
-      // Log detailed error information
-      console.error(`Anthropic API error (${errorStatus}):`, JSON.stringify(errorData));
-      
-      // Map common error codes to more helpful messages
-      let userMessage = `Anthropic API error: ${errorStatus}`;
-      
-      if (errorStatus === 401) {
-        userMessage = 'Invalid API key. Please check your Anthropic API key and try again.';
-      } else if (errorStatus === 429) {
-        userMessage = 'Rate limit exceeded. Please try again later.';
-      } else if (errorStatus === 500) {
-        userMessage = 'Anthropic API server error. Please try again later.';
-      }
-      
-      return new Response(
-        JSON.stringify({ 
-          error: { 
-            message: userMessage,
+      // Check if response is ok
+      if (!response.ok) {
+        const errorStatus = response.status;
+        let errorData;
+        
+        try {
+          // Try to parse error response as JSON
+          errorData = await response.json();
+        } catch {
+          // If not JSON, get as text
+          const errorText = await response.text();
+          errorData = { message: errorText || 'Unknown error from Anthropic API' };
+        }
+        
+        // Log detailed error information
+        console.error(`Anthropic API error (${errorStatus}):`, JSON.stringify(errorData));
+        
+        // Map common error codes to more helpful messages
+        let userMessage = `Anthropic API error: ${errorStatus}`;
+        
+        if (errorStatus === 401) {
+          userMessage = 'Invalid API key. Please check your Anthropic API key and try again.';
+        } else if (errorStatus === 429) {
+          userMessage = 'Rate limit exceeded. Please try again later.';
+        } else if (errorStatus === 500) {
+          userMessage = 'Anthropic API server error. Please try again later.';
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            error: { 
+              message: userMessage,
+              status: errorStatus,
+              details: errorData 
+            } 
+          }),
+          {
             status: errorStatus,
-            details: errorData 
-          } 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      // Parse the Anthropic response
+      const data = await response.json();
+      console.log("Anthropic API response received successfully");
+      
+      // Return the successful response
+      return new Response(
+        JSON.stringify(data),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    } catch (fetchError) {
+      // Clear the timeout if it's still active
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      console.error("Fetch error:", fetchError);
+      
+      // Handle abort/timeout errors specially
+      if (fetchError.name === 'AbortError') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'Request timed out. The Anthropic API took too long to respond.',
+              details: { name: fetchError.name, message: fetchError.message }
+            }
+          }),
+          {
+            status: 504, // Gateway Timeout
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      // Handle other fetch errors
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: 'Error connecting to Anthropic API',
+            details: { name: fetchError.name, message: fetchError.message }
+          }
         }),
         {
-          status: errorStatus,
+          status: 502, // Bad Gateway
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
     }
-
-    // Parse the Anthropic response
-    const data = await response.json();
-    console.log("Anthropic API response received successfully");
-    
-    // Return the successful response
-    return new Response(
-      JSON.stringify(data),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
   } catch (error) {
     console.error("Unhandled error in Edge Function:", error);
     return new Response(

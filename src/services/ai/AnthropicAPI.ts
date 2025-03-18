@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { ApiKeyService } from './ApiKeyService';
 import { AnthropicApiClient } from './AnthropicApiClient';
 import { supabase } from '@/integrations/supabase/client';
+import { StorageService } from '../StorageService';
 
 export class AnthropicAPI {
   /**
@@ -61,5 +62,20 @@ export class AnthropicAPI {
       toast.error(error.message || 'Failed to connect to Anthropic API. Please check your API key in Settings.');
       throw error;
     }
+  }
+
+  /**
+   * Get guidelines and sample statements to enhance AI generation
+   */
+  static async getNHSStatementResources() {
+    const guidelines = await StorageService.getGuidelines();
+    const sampleStatements = await StorageService.getSampleStatements();
+    
+    console.log(`Retrieved ${guidelines.length} guidelines and ${sampleStatements.length} sample statements for AI enhancement`);
+    
+    return {
+      guidelines,
+      sampleStatements
+    };
   }
 }
