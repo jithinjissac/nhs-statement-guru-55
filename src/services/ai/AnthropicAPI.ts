@@ -1,4 +1,3 @@
-
 import { AIService } from './AIService';
 import { StorageService } from '../StorageService';
 import { toast } from 'sonner';
@@ -39,7 +38,7 @@ export class AnthropicAPI {
             if (fallbackKey) {
               console.log("Using fallback API key from environment variables");
               // Store the key for future use
-              StorageService.storeApiKey('anthropic', fallbackKey);
+              StorageService.saveApiKey('anthropic', fallbackKey);
               finalApiKey = fallbackKey;
             } else {
               throw new Error('Anthropic API key not set. Please set it in the Settings page.');
