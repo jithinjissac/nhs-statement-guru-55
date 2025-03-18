@@ -5,15 +5,15 @@ import { AnthropicApiClient } from './AnthropicApiClient';
 
 export class AnthropicAPI {
   /**
-   * Call to Anthropic API for CV analysis
+   * Call to Anthropic API for analysis
    */
   static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
     try {
       // Get API key
-      let finalApiKey;
+      let apiKey;
       try {
-        finalApiKey = await ApiKeyService.getApiKey('anthropic');
-        console.log("API key available:", finalApiKey ? "Yes" : "No");
+        apiKey = await ApiKeyService.getApiKey('anthropic');
+        console.log("API key available:", apiKey ? "Yes" : "No");
       } catch (keyError) {
         console.error('Error retrieving API key:', keyError);
         throw new Error('Could not retrieve Anthropic API key. Please check your settings.');
@@ -30,8 +30,8 @@ export class AnthropicAPI {
       // Prepare payload
       const payload = AnthropicApiClient.preparePayload(messages, maxTokens);
       
-      // Make the API call
-      return await AnthropicApiClient.callApi(payload, finalApiKey);
+      // Make the direct API call
+      return await AnthropicApiClient.callApi(payload, apiKey);
       
     } catch (error) {
       console.error('Error calling Anthropic API:', error);

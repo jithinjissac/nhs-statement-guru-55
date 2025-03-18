@@ -1,8 +1,9 @@
 
-import { supabase } from "@/integrations/supabase/client";
 import { withRetry, createRequestTimeout } from "@/utils/ApiUtils";
 
 export class AnthropicApiClient {
+  private static BASE_URL = "https://api.anthropic.com/v1/messages";
+
   /**
    * Validates message format before sending to Anthropic
    */
@@ -41,49 +42,45 @@ export class AnthropicApiClient {
   }
   
   /**
-   * Makes the actual API call to Anthropic through the Edge Function
+   * Makes the direct API call to Anthropic
    */
   static async callApi(payload: any, apiKey: string): Promise<any> {
     // Set up timeout handling
     const { controller, clearTimeout } = createRequestTimeout(120000);
     
     try {
-      console.log("Calling Anthropic API through Edge Function proxy...");
+      console.log("Making direct call to Anthropic API...");
       
       return await withRetry(
         async () => {
-          const { data, error } = await supabase.functions.invoke('anthropic-proxy', {
-            body: {
-              ...payload,
-              apiKey: apiKey
-            }
+          const response = await fetch(this.BASE_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
           });
           
-          if (error) {
-            console.error("Edge function error:", error);
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error("Anthropic API error:", errorData);
             
-            if (error.message && error.message.includes('deployed')) {
-              throw new Error(`Edge Function not deployed or not responding. Please make sure the Edge Function is deployed properly.`);
-            } else {
-              throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
-            }
-          }
-          
-          if (data && data.error) {
-            console.error("Anthropic API error via Edge Function:", data.error);
-            
-            if (data.error.status === 401 || 
-                (data.error.message && data.error.message.includes('API key'))) {
+            if (response.status === 401) {
               throw new Error(`Invalid API key. Please check your Anthropic API key in Settings.`);
             }
             
-            throw new Error(`Anthropic API error: ${data.error.message || JSON.stringify(data.error)}`);
+            throw new Error(`Anthropic API error: ${errorData.error?.message || response.statusText}`);
           }
           
-          console.log("Anthropic API call completed successfully via Edge Function");
+          const data = await response.json();
+          
+          console.log("Anthropic API call completed successfully");
           console.log("Response preview:", JSON.stringify(data).substring(0, 200) + "...");
           
-          if (!data || !data.content || !Array.isArray(data.content) || data.content.length === 0) {
+          if (!data || !data.content) {
             console.warn("Unexpected response structure from Anthropic API:", JSON.stringify(data).substring(0, 200));
             throw new Error("Invalid response structure from Anthropic API");
           }
@@ -99,12 +96,10 @@ export class AnthropicApiClient {
               return false;
             }
             
-            // Only retry network errors, 5xx server errors, or deployment issues
+            // Only retry network errors, 5xx server errors
             return error instanceof TypeError || 
                   error.message.includes('5') || 
-                  error.message.includes('network') || 
-                  error.message.includes('deployed') || 
-                  error.message.includes('Edge Function');
+                  error.message.includes('network');
           }
         }
       );
