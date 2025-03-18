@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AIService, CVAnalysisResult } from '@/services/AIService';
 import { toast } from 'sonner';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 
 interface CVAnalyzerProps {
   cv: string;
@@ -87,7 +88,7 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
         </CardHeader>
         <CardContent>
           <div className="space-y-8">
-            {/* Step 1: Initial Information */}
+            {/* Step 1: Additional Experience Input */}
             <div className={`border rounded-lg p-4 ${activeStep === 1 ? 'bg-muted/50 border-primary' : ''}`}>
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
@@ -151,102 +152,135 @@ const CVAnalyzer: React.FC<CVAnalyzerProps> = ({ cv, jobDescription, onStatement
               </div>
             </div>
             
-            {/* Step 2: CV Analysis */}
+            {/* Step 2: CV & JD Analysis with Comparison Table */}
             <div className={`border rounded-lg p-4 ${activeStep === 2 ? 'bg-muted/50 border-primary' : activeStep > 2 ? 'opacity-80' : 'opacity-60'}`}>
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                   2
                 </div>
                 <div className="space-y-4 w-full">
-                  <h3 className="text-lg font-medium">CV Analysis</h3>
+                  <h3 className="text-lg font-medium">Analysis Results</h3>
                   
                   {analysis ? (
                     <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Skills and Requirements */}
-                        <div className="space-y-4">
-                          <h4 className="font-medium">Relevant Skills</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {analysis.relevantSkills.map((skill, index) => (
-                              <Badge key={index} variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
-                                {skill}
-                              </Badge>
-                            ))}
-                          </div>
-                          
-                          <div className="space-y-2 mt-4">
-                            <h4 className="font-medium flex items-center">
-                              <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-                              Matched Requirements
-                            </h4>
-                            <ul className="text-sm space-y-1">
-                              {analysis.matchedRequirements.map((req, index) => (
-                                <li key={index} className="text-green-600 dark:text-green-400">{req}</li>
+                      {/* CV Summary Section */}
+                      <Card className="border border-muted">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">CV & Experience Summary</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2">
+                            <h5 className="text-sm font-medium">Relevant Skills</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {analysis.relevantSkills.map((skill, index) => (
+                                <Badge key={index} variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                                  {skill}
+                                </Badge>
                               ))}
-                            </ul>
+                            </div>
                           </div>
-
-                          <div className="space-y-2 mt-4">
-                            <h4 className="font-medium flex items-center">
-                              <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
-                              Missing Requirements
-                            </h4>
-                            <ul className="text-sm space-y-1">
-                              {analysis.missingRequirements.map((req, index) => (
-                                <li key={index} className="text-amber-600 dark:text-amber-400">{req}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                        
-                        {/* Experience */}
-                        <div className="space-y-4">
-                          <h4 className="font-medium">Relevant Experience</h4>
                           
                           <div className="space-y-2">
                             <h5 className="text-sm font-medium">Clinical Experience</h5>
-                            <ul className="text-sm space-y-1">
+                            <ul className="text-sm space-y-1 list-disc pl-5">
                               {analysis.relevantExperience.clinical.map((exp, index) => (
                                 <li key={index}>{exp}</li>
                               ))}
                             </ul>
                           </div>
 
-                          <div className="space-y-2 mt-4">
+                          <div className="space-y-2">
                             <h5 className="text-sm font-medium">Non-Clinical Experience</h5>
-                            <ul className="text-sm space-y-1">
+                            <ul className="text-sm space-y-1 list-disc pl-5">
                               {analysis.relevantExperience.nonClinical.map((exp, index) => (
                                 <li key={index}>{exp}</li>
                               ))}
                             </ul>
                           </div>
                           
-                          {/* NHS Values */}
-                          <div className="space-y-2 mt-4">
-                            <h5 className="text-sm font-medium">NHS Values Identified</h5>
-                            <div className="flex flex-wrap gap-2">
-                              {analysis.nhsValues.map((value, index) => (
-                                <Badge key={index} variant="default" className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                                  {value}
-                                </Badge>
-                              ))}
+                          {jobSpecificExperiences && (
+                            <div className="space-y-2">
+                              <h5 className="text-sm font-medium">Additional Experience Statement</h5>
+                              <div className="text-sm p-3 bg-muted rounded-md">
+                                {jobSpecificExperiences}
+                              </div>
                             </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                      
+                      {/* Requirements Comparison Table */}
+                      <Card className="border border-muted">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">Requirements Comparison</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Requirement</TableHead>
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {analysis.matchedRequirements.map((req, index) => (
+                                <TableRow key={`matched-${index}`}>
+                                  <TableCell>{req}</TableCell>
+                                  <TableCell className="flex items-center">
+                                    <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                                    <span className="text-green-600 dark:text-green-400">Matched</span>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {analysis.missingRequirements.map((req, index) => (
+                                <TableRow key={`missing-${index}`}>
+                                  <TableCell>{req}</TableCell>
+                                  <TableCell className="flex items-center">
+                                    <AlertCircle className="h-4 w-4 text-amber-500 mr-2" />
+                                    <span className="text-amber-600 dark:text-amber-400">Missing</span>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
+                      
+                      {/* NHS Values Section */}
+                      <Card className="border border-muted">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">NHS Values Identified</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-2">
+                            {analysis.nhsValues.map((value, index) => (
+                              <Badge key={index} variant="default" className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                {value}
+                              </Badge>
+                            ))}
                           </div>
-                        </div>
-                      </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            These NHS values were identified in the job description and should be emphasized in your statement.
+                          </p>
+                        </CardContent>
+                      </Card>
                       
                       {/* Recommendations */}
-                      <div>
-                        <h4 className="font-medium mb-2">Recommendations</h4>
-                        <ul className="text-sm space-y-2">
-                          {analysis.recommendedHighlights.map((rec, index) => (
-                            <li key={index} className="flex">
-                              <ArrowRight className="h-4 w-4 text-blue-500 mr-2 flex-shrink-0 mt-0.5" />
-                              <span>{rec}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      <Card className="border border-muted">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">Recommendations</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="text-sm space-y-2">
+                            {analysis.recommendedHighlights.map((rec, index) => (
+                              <li key={index} className="flex">
+                                <ArrowRight className="h-4 w-4 text-blue-500 mr-2 flex-shrink-0 mt-0.5" />
+                                <span>{rec}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
                       
                       <div className="flex justify-end">
                         <Button
