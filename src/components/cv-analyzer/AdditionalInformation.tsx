@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FormLabel } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
@@ -37,8 +37,9 @@ const AdditionalInformation: React.FC<AdditionalInformationProps> = ({
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <FormLabel>Additional Experience</FormLabel>
+          <Label htmlFor="additionalExperience">Additional Experience</Label>
           <Textarea
+            id="additionalExperience"
             placeholder="Describe any additional experiences relevant to this job that may not be in your CV..."
             value={additionalExperience}
             onChange={(e) => setAdditionalExperience(e.target.value)}
@@ -46,8 +47,9 @@ const AdditionalInformation: React.FC<AdditionalInformationProps> = ({
           />
         </div>
         <div>
-          <FormLabel>Additional Qualifications</FormLabel>
+          <Label htmlFor="additionalQualifications">Additional Qualifications</Label>
           <Textarea
+            id="additionalQualifications"
             placeholder="List any additional qualifications not mentioned in your CV..."
             value={additionalQualifications}
             onChange={(e) => setAdditionalQualifications(e.target.value)}
@@ -55,8 +57,9 @@ const AdditionalInformation: React.FC<AdditionalInformationProps> = ({
           />
         </div>
         <div>
-          <FormLabel>Additional Skills</FormLabel>
+          <Label htmlFor="additionalSkills">Additional Skills</Label>
           <Textarea
+            id="additionalSkills"
             placeholder="List any additional skills not mentioned in your CV..."
             value={additionalSkills}
             onChange={(e) => setAdditionalSkills(e.target.value)}
