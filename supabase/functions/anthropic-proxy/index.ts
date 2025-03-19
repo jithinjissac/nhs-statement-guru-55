@@ -166,7 +166,7 @@ serve(async (req) => {
 
       // Parse the Anthropic response
       const data = await response.json();
-      console.log("Anthropic API response received successfully");
+      console.log("Anthropic API call completed successfully");
       
       // Return the successful response
       return new Response(

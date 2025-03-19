@@ -69,10 +69,14 @@ export class AnthropicAPI {
    * Get guidelines and sample statements to enhance AI generation
    */
   static async getNHSStatementResources() {
+    // Dynamically fetch all guidelines from storage service
     const guidelines = await StorageService.getGuidelines();
+    // Dynamically fetch all sample statements from storage service
     const sampleStatements = await StorageService.getSampleStatements();
     
-    // Additional NHS supporting statement guidelines
+    console.log(`Dynamically retrieved ${guidelines.length} guidelines and ${sampleStatements.length} sample statements for AI enhancement`);
+    
+    // Additional NHS supporting statement guidelines - these complement the user-added guidelines
     const nhsSupportingStatementGuidelines = [
       {
         title: "Purpose of an NHS Supporting Statement",
@@ -93,13 +97,15 @@ export class AnthropicAPI {
       {
         title: "Using Personal Language",
         content: "Write in first person with natural language variations. Include personal reflections on your healthcare journey and authentic motivations for working in the NHS. Avoid formulaic or robotic phrasing."
+      },
+      {
+        title: "Human-Like Writing Style",
+        content: "Use varied sentence structures, occasional contractions, and personal anecdotes. Incorporate thoughtful reflections on your experiences and motivations. Write as if speaking directly to another person, with warmth and authenticity. Avoid overly formal language or repetitive structures."
       }
     ];
     
-    // Combine stored guidelines with the NHS-specific ones
+    // Combine dynamically fetched guidelines with the NHS-specific ones
     const enhancedGuidelines = [...guidelines, ...nhsSupportingStatementGuidelines];
-    
-    console.log(`Retrieved ${enhancedGuidelines.length} guidelines and ${sampleStatements.length} sample statements for AI enhancement`);
     
     return {
       guidelines: enhancedGuidelines,
