@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -290,8 +289,8 @@ export class StorageService {
         id: item.id,
         title: item.title,
         content: item.content,
-        // Use a default category value since it might not exist in the database
-        category: (item as any).category || 'general',
+        // Now we can directly access the category field from the database
+        category: item.category || 'general',
         dateAdded: item.created_at
       }));
       

@@ -89,6 +89,7 @@ export type Database = {
       }
       sample_statements: {
         Row: {
+          category: string
           content: string
           created_at: string
           created_by: string
@@ -97,6 +98,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          category?: string
           content: string
           created_at?: string
           created_by: string
@@ -105,6 +107,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          category?: string
           content?: string
           created_at?: string
           created_by?: string
