@@ -33,7 +33,8 @@ export class AnthropicAPI {
       const payload = {
         model: 'claude-3-sonnet-20240229',
         max_tokens: maxTokens,
-        messages: messages
+        messages: messages,
+        temperature: 0.85 // Slightly higher temperature for more natural, human-like text
       };
 
       console.log("Using Supabase Edge Function to avoid CORS issues");
@@ -84,6 +85,14 @@ export class AnthropicAPI {
       {
         title: "What NHS Employers Look For",
         content: "Employers assess how well you meet criteria with specific examples, your alignment with NHS values, genuine passion for the role, evidence of research about the organization, and attention to detail in your writing."
+      },
+      {
+        title: "NHS Values to Emphasize",
+        content: "Working together for patients, Respect and dignity, Commitment to quality of care, Compassion, Improving lives, Everyone counts. Always demonstrate how your experience aligns with these core values."
+      },
+      {
+        title: "Using Personal Language",
+        content: "Write in first person with natural language variations. Include personal reflections on your healthcare journey and authentic motivations for working in the NHS. Avoid formulaic or robotic phrasing."
       }
     ];
     

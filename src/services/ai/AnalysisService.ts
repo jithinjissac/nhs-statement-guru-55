@@ -328,12 +328,13 @@ Return ONLY a valid JSON object with the following structure (no extra text befo
       const { guidelines, sampleStatements } = await AnthropicAPI.getNHSStatementResources();
       
       // Extract relevant guidelines content
-      const guidelineContent = guidelines.map(g => `${g.title}: ${g.content.substring(0, 300)}...`).join('\n\n');
+      const guidelineContent = guidelines.map(g => `${g.title}: ${g.content}`).join('\n\n');
       
       // Extract relevant sample statement content based on role similarities
       const roleKeywords = this.extractRoleKeywords(jobDescription);
-      const relevantSamples = this.findRelevantSamples(sampleStatements, roleKeywords, 2);
-      const samplesContent = relevantSamples.map(s => `${s.title}: ${s.content.substring(0, 300)}...`).join('\n\n');
+      const relevantSamples = this.findRelevantSamples(sampleStatements, roleKeywords, 3);
+      const samplesContent = relevantSamples.map(s => `Sample ${s.title} (${s.category}): 
+${s.content.substring(0, 800)}...`).join('\n\n---\n\n');
       
       progressCallback?.('Preparing statement generation', 55);
       
@@ -347,7 +348,7 @@ Return ONLY a valid JSON object with the following structure (no extra text befo
       
       // Create a concise summary of the analysis
       const matchedRequirements = analysis.matchedRequirements.map(item => 
-        `- ${item.requirement.replace(/^\[(Essential|Desirable)\]\s+/, '')}`
+        `- ${item.requirement.replace(/^\[(Essential|Desirable)\]\s+/, '')}: ${item.evidence.substring(0, 100)}...`
       ).join('\n');
       
       const missingRequirements = analysis.missingRequirements.map(item => 
@@ -356,20 +357,44 @@ Return ONLY a valid JSON object with the following structure (no extra text befo
       
       const highlights = analysis.recommendedHighlights.join('\n- ');
       const nhsValues = analysis.nhsValues.join(', ');
+      const skills = analysis.relevantSkills.join(', ');
+      const clinicalExp = analysis.relevantExperience.clinical.join(', ');
+      const nonClinicalExp = analysis.relevantExperience.nonClinical.join(', ');
+      const adminExp = analysis.relevantExperience.administrative.join(', ');
+      const education = analysis.education.join(', ');
       
       // Create the enhanced prompt for human-like statement generation
       const messages = [
         {
-          role: "user",
-          content: `Please write a compelling NHS job application supporting statement based on this analysis of a CV against a job description.
+          role: "system",
+          content: `You are an expert NHS career advisor who writes authentic, personalized supporting statements. Your statements have the following qualities:
 
-CV Summary:
-- Relevant skills: ${analysis.relevantSkills.join(', ')}
-- Clinical experience: ${analysis.relevantExperience.clinical.join(', ')}
-- Non-clinical experience: ${analysis.relevantExperience.nonClinical.join(', ')}
-- Administrative experience: ${analysis.relevantExperience.administrative.join(', ')}
+1. They sound completely natural, as if written by the actual applicant
+2. They vary sentence structure, length, and complexity for a natural flow
+3. They use first-person perspective with genuine reflections and emotional connections
+4. They avoid repetitive phrases, corporate jargon, and formulaic language
+5. They incorporate personal touches that reflect the applicant's unique journey
+6. They demonstrate NHS values through specific examples rather than generic statements
+7. They tell a compelling career narrative that connects past experience to the role
+8. They sound warm, authentic and conversational - like a real person speaking`
+        },
+        {
+          role: "user",
+          content: `Please write a compelling NHS job application supporting statement based on this CV and job description analysis. 
+
+First, here's the full CV:
+${cv}
+
+Here's the full job description:
+${jobDescription}
+
+CV Analysis Summary:
+- Relevant skills: ${skills}
+- Clinical experience: ${clinicalExp}
+- Non-clinical experience: ${nonClinicalExp}
+- Administrative experience: ${adminExp}
 - Years of experience: ${analysis.relevantExperience.yearsOfExperience}
-- Education: ${analysis.education.join(', ')}
+- Education: ${education}
 
 Job Requirements Met:
 ${matchedRequirements}
@@ -386,7 +411,7 @@ ${nhsValues}
 ${additionalInfo ? `Additional Information Provided by Applicant:
 ${additionalInfo}` : ''}
 
-NHS Statement Guidelines to Follow:
+NHS Statement Guidelines:
 ${guidelineContent}
 
 Sample Statements for Reference:
@@ -394,21 +419,23 @@ ${samplesContent}
 
 Instructions for Human-Like Statement Generation:
 1. Write a compelling supporting statement at ${audienceLevel} reading level
-2. Use varied sentence structures, mixing concise and detailed sentences
-3. Ensure natural flow and professional tone with smooth transitions
-4. Create a personalized statement specific to this NHS role
-5. Reflect genuine personal motivations and relevant real-life experiences
-6. Begin with a strong introduction explaining interest in the role
-7. Clearly highlight key qualifications, experience, and NHS-related skills
-8. Use first-person perspective with authentic professional expression
-9. Include concrete examples of compassionate care, teamwork, or problem-solving
-10. Naturally integrate NHS values (compassion, respect, integrity, teamwork)
-11. Avoid repetitive, robotic phrasing and generate dynamic, engaging language
-12. End with a compelling conclusion emphasizing enthusiasm and commitment
-13. Keep the statement between 500-800 words with clear paragraphs
-14. Ensure the text sounds like a real applicant's personal expression
-15. Do not use bullet points; write in proper prose
-16. Do not mention "CV" or "resume" directly; write in first person ("I have...")`
+2. Use varied sentence structures, mixing shorter and longer sentences naturally
+3. Create a personal, conversational tone that feels authentic and genuine
+4. Begin with a strong, personal introduction explaining interest in this specific role
+5. Address each requirement from the job description with specific examples from the CV
+6. For any missing requirements, address them honestly using the additional information provided
+7. Naturally incorporate NHS values throughout - don't just list them
+8. Use transition words sparingly and naturally - avoid obvious formula indicators
+9. Include 1-2 brief anecdotes that demonstrate key qualities (compassion, leadership, etc.)
+10. Include realistic, modest self-reflection on growth and learning
+11. End with a genuine, personal conclusion showing enthusiasm and fit
+12. Keep the statement between 500-800 words with natural paragraph breaks
+13. Format as cohesive paragraphs - no bullet points or headings
+14. MOST IMPORTANT: Make it sound like a real person wrote it, with natural language variations
+15. Do not use generic claims like "I am passionate about" - show passion through specific examples
+16. Write in first person, using "I" naturally throughout
+
+Create a 100% human-like supporting statement that genuinely represents the applicant's experience, skills, and personality while addressing the requirements of this NHS role.`
         }
       ];
       

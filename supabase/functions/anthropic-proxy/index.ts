@@ -77,8 +77,7 @@ serve(async (req) => {
       model: payload.model || 'claude-3-sonnet-20240229',
       max_tokens: payload.max_tokens || 4000,
       messages: payload.messages || [],
-      // Important: Only add response_format if specifically needed
-      // The Claude API now requires specific format for response_format
+      temperature: payload.temperature || 0.85 // Using higher temperature by default for human-like text
     };
 
     // Only add response_format if it's in the original payload
@@ -95,6 +94,7 @@ serve(async (req) => {
     // Log request info
     console.log(`Making request to Anthropic API with ${requestPayload.messages.length} messages`);
     console.log(`Model: ${requestPayload.model}`);
+    console.log(`Temperature: ${requestPayload.temperature}`);
     console.log(`Payload size: ${JSON.stringify(requestPayload).length} bytes`);
 
     // Make the request to Anthropic API with improved error handling and timeout
