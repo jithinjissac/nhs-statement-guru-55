@@ -71,10 +71,29 @@ export class AnthropicAPI {
     const guidelines = await StorageService.getGuidelines();
     const sampleStatements = await StorageService.getSampleStatements();
     
-    console.log(`Retrieved ${guidelines.length} guidelines and ${sampleStatements.length} sample statements for AI enhancement`);
+    // Additional NHS supporting statement guidelines
+    const nhsSupportingStatementGuidelines = [
+      {
+        title: "Purpose of an NHS Supporting Statement",
+        content: "The purpose of a supporting statement is to demonstrate you are the right person for the job, show you're applying for the right reasons, and meet all criteria in the job pack. It should address each criterion in the person specification with evidence."
+      },
+      {
+        title: "Supporting Statement Structure",
+        content: "Start with an attention-grabbing introduction explaining why you're applying. In the main body, address each criterion with specific examples using the STAR method (Situation, Task, Action, Result). End with a strong conclusion highlighting key strengths and how you embody NHS values."
+      },
+      {
+        title: "What NHS Employers Look For",
+        content: "Employers assess how well you meet criteria with specific examples, your alignment with NHS values, genuine passion for the role, evidence of research about the organization, and attention to detail in your writing."
+      }
+    ];
+    
+    // Combine stored guidelines with the NHS-specific ones
+    const enhancedGuidelines = [...guidelines, ...nhsSupportingStatementGuidelines];
+    
+    console.log(`Retrieved ${enhancedGuidelines.length} guidelines and ${sampleStatements.length} sample statements for AI enhancement`);
     
     return {
-      guidelines,
+      guidelines: enhancedGuidelines,
       sampleStatements
     };
   }
