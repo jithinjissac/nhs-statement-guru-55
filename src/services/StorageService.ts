@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -159,7 +158,7 @@ export class StorageService {
       {
         id: uuidv4(),
         title: 'NHS Values Integration',
-        content: 'Always reference the NHS Constitution values in your statement: respect and dignity, commitment to quality of care, compassion, improving lives, working together for patients, and everyone counts. Provide concrete examples of how you've demonstrated these values in your work.',
+        content: "Always reference the NHS Constitution values in your statement: respect and dignity, commitment to quality of care, compassion, improving lives, working together for patients, and everyone counts. Provide concrete examples of how you've demonstrated these values in your work.",
         dateAdded: new Date().toISOString()
       }
     ];
