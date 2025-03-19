@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -35,14 +34,12 @@ import {
 type ProcessingStatus = 'idle' | 'processing' | 'complete' | 'error';
 
 const CreateStatement: React.FC = () => {
-  // State for the documents
   const [cv, setCV] = useState<ProcessedFile | null>(null);
   const [jobDescription, setJobDescription] = useState<ProcessedFile | null>(null);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>('idle');
   const [generatedStatement, setGeneratedStatement] = useState<string>('');
   const [activeStep, setActiveStep] = useState(1);
   
-  // State for guidelines and samples
   const [guidelines, setGuidelines] = useState<Guideline[]>([]);
   const [sampleStatements, setSampleStatements] = useState<SampleStatement[]>([]);
   const [isGuidelinesOpen, setIsGuidelinesOpen] = useState(false);
@@ -53,7 +50,6 @@ const CreateStatement: React.FC = () => {
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Fetch guidelines and sample statements
   useEffect(() => {
     fetchGuidelines();
     fetchSampleStatements();
@@ -83,7 +79,6 @@ const CreateStatement: React.FC = () => {
     }
   };
 
-  // CV dropzone
   const onDropCV = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     
@@ -95,7 +90,6 @@ const CreateStatement: React.FC = () => {
       setProcessingStatus('complete');
       toast.success('CV processed successfully');
       
-      // Automatically proceed to analysis if both files are uploaded
       if (jobDescription) {
         setActiveStep(2);
       }
@@ -117,7 +111,6 @@ const CreateStatement: React.FC = () => {
     maxFiles: 1
   });
   
-  // Job description dropzone
   const onDropJobDescription = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     
@@ -129,7 +122,6 @@ const CreateStatement: React.FC = () => {
       setProcessingStatus('complete');
       toast.success('Job description processed successfully');
       
-      // Automatically proceed to analysis if both files are uploaded
       if (cv) {
         setActiveStep(2);
       }
@@ -155,7 +147,6 @@ const CreateStatement: React.FC = () => {
     maxFiles: 1
   });
   
-  // Handle document removal
   const handleRemoveCV = () => {
     setCV(null);
     if (activeStep > 1) {
@@ -172,13 +163,11 @@ const CreateStatement: React.FC = () => {
     toast.info('Job description removed');
   };
   
-  // Handle statement from CV Analyzer
   const handleTailoredStatement = (statement: string) => {
     setGeneratedStatement(statement);
     setActiveStep(3);
   };
   
-  // Handle statement download
   const downloadStatement = () => {
     if (!generatedStatement.trim()) {
       toast.error('Please generate a statement first');
@@ -198,34 +187,28 @@ const CreateStatement: React.FC = () => {
     toast.success('Statement downloaded successfully');
   };
   
-  // Handle guideline preview
   const handleGuidelinePreview = (guideline: Guideline) => {
     setSelectedGuideline(guideline);
     setIsGuidelinesOpen(true);
   };
   
-  // Handle sample statement preview
   const handleSamplePreview = (sample: SampleStatement) => {
     setSelectedSample(sample);
     setIsSamplesOpen(true);
   };
   
-  // Get unique categories for sample statements filter
   const categories = [...new Set(sampleStatements.map(sample => sample.category))];
   
-  // Filter sample statements by category
   const filteredSamples = selectedCategory
     ? sampleStatements.filter(sample => sample.category === selectedCategory)
     : sampleStatements;
   
-  // Step content rendering based on active step
   const renderStepContent = () => {
     switch (activeStep) {
       case 1: // Document Upload
         return (
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* CV Upload */}
               <Card className="hover-lift overflow-hidden">
                 <CardContent className="p-6">
                   <div className="mb-4 flex items-center gap-2">
@@ -284,7 +267,6 @@ const CreateStatement: React.FC = () => {
                 </CardContent>
               </Card>
               
-              {/* Job Description Upload */}
               <Card className="hover-lift overflow-hidden">
                 <CardContent className="p-6">
                   <div className="mb-4 flex items-center gap-2">
@@ -344,12 +326,10 @@ const CreateStatement: React.FC = () => {
               </Card>
             </div>
             
-            {/* Resources Section */}
             <div className="space-y-4">
               <h3 className="text-xl font-semibold">Resources</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Guidelines */}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -393,7 +373,6 @@ const CreateStatement: React.FC = () => {
                   </CardContent>
                 </Card>
                 
-                {/* Sample Statements */}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -412,14 +391,14 @@ const CreateStatement: React.FC = () => {
                     ) : sampleStatements.length > 0 ? (
                       <div className="space-y-4">
                         <Select
-                          value={selectedCategory || ''}
-                          onValueChange={(value) => setSelectedCategory(value || null)}
+                          value={selectedCategory || "all"}
+                          onValueChange={(value) => setSelectedCategory(value === "all" ? null : value)}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="All Categories" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All Categories</SelectItem>
+                            <SelectItem value="all">All Categories</SelectItem>
                             {categories.map(category => (
                               <SelectItem key={category} value={category}>
                                 {category.charAt(0).toUpperCase() + category.slice(1)}
@@ -461,7 +440,6 @@ const CreateStatement: React.FC = () => {
               </div>
             </div>
             
-            {/* Next Button - Only if both documents are uploaded */}
             {cv && jobDescription && (
               <div className="flex justify-center">
                 <Button
@@ -553,7 +531,6 @@ const CreateStatement: React.FC = () => {
         </p>
       </div>
       
-      {/* Steps Indicator */}
       <div className="mb-12">
         <div className="flex justify-between items-center">
           {[
@@ -562,7 +539,6 @@ const CreateStatement: React.FC = () => {
             { step: 3, label: "Final Statement" }
           ].map((step, index) => (
             <React.Fragment key={step.step}>
-              {/* Step indicator */}
               <div className="flex flex-col items-center">
                 <div className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-medium ${
                   activeStep >= step.step 
@@ -580,7 +556,6 @@ const CreateStatement: React.FC = () => {
                 </span>
               </div>
               
-              {/* Connector line */}
               {index < 2 && (
                 <div className="flex-1 mx-2">
                   <div className={`h-0.5 ${
@@ -595,10 +570,8 @@ const CreateStatement: React.FC = () => {
         </div>
       </div>
       
-      {/* Step Content */}
       {renderStepContent()}
       
-      {/* Guideline Preview Dialog */}
       <Dialog open={isGuidelinesOpen} onOpenChange={setIsGuidelinesOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -616,7 +589,6 @@ const CreateStatement: React.FC = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Sample Statement Preview Dialog */}
       <Dialog open={isSamplesOpen} onOpenChange={setIsSamplesOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
