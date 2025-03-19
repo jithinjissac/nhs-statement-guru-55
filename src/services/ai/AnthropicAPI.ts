@@ -48,7 +48,7 @@ export class AnthropicAPI {
       
       if (error) {
         console.error('Edge function error:', error);
-        throw new Error(`Error from proxy: ${error.message}`);
+        throw new Error(`Edge Function returned a non-2xx status code: ${error.message}`);
       }
       
       if (!data) {

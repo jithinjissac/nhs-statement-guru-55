@@ -77,13 +77,12 @@ serve(async (req) => {
       model: payload.model || 'claude-3-sonnet-20240229',
       max_tokens: payload.max_tokens || 4000,
       messages: payload.messages || [],
-      temperature: payload.temperature || 0.85 // Using higher temperature by default for human-like text
+      temperature: payload.temperature || 0.85
     };
 
-    // Only add response_format if it's in the original payload
-    // This avoids errors about invalid response_format
+    // IMPORTANT: Only include response_format if it's provided in the original payload
+    // This avoids potential API errors if response_format is not properly formatted
     if (payload.response_format) {
-      // Validate response_format is properly formatted to avoid API errors
       if (typeof payload.response_format === 'object' && payload.response_format.type) {
         requestPayload.response_format = payload.response_format;
       } else {
@@ -93,20 +92,13 @@ serve(async (req) => {
 
     // Log request info
     console.log(`Making request to Anthropic API with ${requestPayload.messages.length} messages`);
-    console.log(`Model: ${requestPayload.model}`);
-    console.log(`Temperature: ${requestPayload.temperature}`);
-    console.log(`Payload size: ${JSON.stringify(requestPayload).length} bytes`);
-
-    // Make the request to Anthropic API with improved error handling and timeout
-    let controller;
-    let timeoutId;
+    console.log(`Model: ${requestPayload.model}, Temperature: ${requestPayload.temperature}`);
+    
+    // Set up timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
     
     try {
-      // Set up a timeout for the fetch request
-      controller = new AbortController();
-      const timeoutMs = 60000; // 60 second timeout
-      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -121,7 +113,7 @@ serve(async (req) => {
       // Clear the timeout as we got a response
       clearTimeout(timeoutId);
 
-      // Check if response is ok
+      // If response is not ok, handle error
       if (!response.ok) {
         const errorStatus = response.status;
         let errorData;
@@ -158,7 +150,7 @@ serve(async (req) => {
             } 
           }),
           {
-            status: errorStatus,
+            status: 502, // Return 502 Bad Gateway instead of passing through the original status code
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           }
         );
@@ -178,7 +170,7 @@ serve(async (req) => {
       );
     } catch (fetchError) {
       // Clear the timeout if it's still active
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
       
       console.error("Fetch error:", fetchError);
       
