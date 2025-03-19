@@ -1,5 +1,6 @@
 
 import { StorageService } from '../StorageService';
+import { toast } from 'sonner';
 
 export class ApiKeyService {
   /**
@@ -35,10 +36,51 @@ export class ApiKeyService {
     if (envKey) {
       console.log(`Using ${provider} API key from environment variables`);
       // Store for future use
-      await StorageService.saveApiKey(provider, envKey);
+      try {
+        await StorageService.saveApiKey(provider, envKey);
+      } catch (saveError) {
+        console.warn(`Failed to save ${provider} API key from environment:`, saveError);
+      }
       return envKey;
     }
     
+    // Check Supabase edge function secrets as a final option
+    try {
+      const { data, error } = await StorageService.getSecretFromSupabase(`${provider.toUpperCase()}_API_KEY`);
+      if (!error && data && data.value) {
+        console.log(`Using ${provider} API key from Supabase secrets`);
+        // Store for future use
+        try {
+          await StorageService.saveApiKey(provider, data.value);
+        } catch (saveError) {
+          console.warn(`Failed to save ${provider} API key from Supabase secret:`, saveError);
+        }
+        return data.value;
+      }
+    } catch (secretError) {
+      console.warn(`Error checking Supabase secrets for ${provider} API key:`, secretError);
+    }
+    
+    toast.error(`${provider} API key not set. Please set it in the Settings page.`, {
+      duration: 6000,
+      action: {
+        label: "Go to Settings",
+        onClick: () => window.location.href = "/admin/settings"
+      }
+    });
+    
     throw new Error(`${provider} API key not set. Please set it in the Settings page.`);
+  }
+  
+  /**
+   * Validates if an API key for the specified provider is set
+   */
+  static async isApiKeySet(provider: string): Promise<boolean> {
+    try {
+      const apiKey = await this.getApiKey(provider);
+      return !!apiKey;
+    } catch (error) {
+      return false;
+    }
   }
 }
