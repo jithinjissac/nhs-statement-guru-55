@@ -6,56 +6,64 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Utility function to add more robust, fine-grained retry logic
+// Utility function to add more robust, fine-grained retry logic with better logging
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3) {
   let lastError;
+  let attempt = 0;
   
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  while (attempt <= maxRetries) {
     try {
       if (attempt > 0) {
-        console.log(`Retry attempt ${attempt}/${maxRetries}`);
+        console.log(`Retry attempt ${attempt}/${maxRetries} for Anthropic API request`);
         // Exponential backoff with jitter
-        const delay = 1000 * Math.pow(1.5, attempt - 1) * (0.9 + Math.random() * 0.2);
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1) * (0.9 + Math.random() * 0.2), 4000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
       
+      console.log(`Making attempt ${attempt + 1} to Anthropic API`);
       const response = await fetch(url, options);
+      
+      // Log response status
+      console.log(`Anthropic API returned status: ${response.status}`);
       
       // Early return for successful responses
       if (response.ok) {
+        console.log("Successfully received response from Anthropic API");
         return response;
       }
       
-      // For error responses, we want to try to get the detailed error message
+      // For error responses, get the detailed error message
       const errorStatus = response.status;
       let errorDetails;
       
       try {
         errorDetails = await response.json();
-      } catch {
-        errorDetails = { message: await response.text() || 'Unknown API error' };
+        console.error(`Anthropic API error (${errorStatus}):`, JSON.stringify(errorDetails));
+      } catch (e) {
+        const text = await response.text();
+        errorDetails = { message: text || 'Unknown API error' };
+        console.error(`Anthropic API error (${errorStatus}):`, text);
       }
       
-      // Don't retry auth errors or bad requests as they won't change on retry
+      // Don't retry auth errors or bad requests
       if (errorStatus === 401 || errorStatus === 400) {
         const error = new Error(`Anthropic API error (${errorStatus}): ${JSON.stringify(errorDetails)}`);
-        // @ts-ignore - Add status for error handling
+        // @ts-ignore
         error.status = errorStatus;
-        // @ts-ignore - Add details for error handling
+        // @ts-ignore
         error.details = errorDetails;
         throw error;
       }
       
-      // For other errors, we'll continue retry attempts
-      const error = new Error(`Anthropic API error (${errorStatus}): ${JSON.stringify(errorDetails)}`);
-      // @ts-ignore - Add status for error handling
-      error.status = errorStatus;
-      // @ts-ignore - Add details for error handling
-      error.details = errorDetails;
-      lastError = error;
+      // For other errors, continue retry attempts
+      lastError = new Error(`Anthropic API error (${errorStatus}): ${JSON.stringify(errorDetails)}`);
+      // @ts-ignore
+      lastError.status = errorStatus;
+      // @ts-ignore
+      lastError.details = errorDetails;
       
     } catch (error) {
-      console.error(`Attempt ${attempt} failed:`, error);
+      console.error(`Attempt ${attempt + 1} failed:`, error.message || error);
       lastError = error;
       
       // Don't retry if it's an abort error (timeout) or auth error
@@ -64,35 +72,77 @@ async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3)
         throw error;
       }
     }
+    
+    attempt++;
   }
   
-  throw lastError;
+  console.error(`All ${maxRetries + 1} attempts to Anthropic API failed`);
+  throw lastError || new Error("Maximum retries exceeded");
 }
 
-// Helper function to check message payload size and truncate if necessary
+// Helper function to sanitize and validate message payload
 function validateMessagePayload(messages: any[]) {
   if (!Array.isArray(messages)) {
+    console.warn("Messages is not an array, returning as is");
     return messages;
   }
   
-  const MAX_CONTENT_LENGTH = 25000; // Characters per message limit
+  console.log(`Validating message payload with ${messages.length} messages`);
+  const MAX_CONTENT_LENGTH = 100000; // Characters per message limit
   const validatedMessages = [...messages];
   
+  let totalSize = 0;
   for (let i = 0; i < validatedMessages.length; i++) {
     const message = validatedMessages[i];
-    if (message?.content && typeof message.content === 'string' && 
-        message.content.length > MAX_CONTENT_LENGTH) {
-      console.warn(`Message at index ${i} is too long (${message.content.length} chars). Truncating to ${MAX_CONTENT_LENGTH} chars.`);
+    if (message?.content) {
+      let contentLength = 0;
       
-      // Truncate and add warning about truncation
-      validatedMessages[i] = {
-        ...message,
-        content: message.content.substring(0, MAX_CONTENT_LENGTH) + 
-          `... [Content truncated from ${message.content.length} characters due to length limits]`
-      };
+      if (typeof message.content === 'string') {
+        contentLength = message.content.length;
+        totalSize += contentLength;
+        
+        if (contentLength > MAX_CONTENT_LENGTH) {
+          console.warn(`Message at index ${i} is too long (${contentLength} chars). Truncating to ${MAX_CONTENT_LENGTH} chars.`);
+          
+          // Truncate and add warning about truncation
+          validatedMessages[i] = {
+            ...message,
+            content: message.content.substring(0, MAX_CONTENT_LENGTH) + 
+              `... [Content truncated from ${contentLength} characters due to length limits]`
+          };
+        }
+      } else if (Array.isArray(message.content)) {
+        // Handle content array (for multimodal messages)
+        let truncated = false;
+        const newContent = message.content.map((item: any) => {
+          if (item.type === 'text' && typeof item.text === 'string') {
+            contentLength += item.text.length;
+            totalSize += item.text.length;
+            
+            if (item.text.length > MAX_CONTENT_LENGTH) {
+              truncated = true;
+              return {
+                type: 'text',
+                text: item.text.substring(0, MAX_CONTENT_LENGTH) + 
+                  `... [Content truncated from ${item.text.length} characters due to length limits]`
+              };
+            }
+          }
+          return item;
+        });
+        
+        if (truncated) {
+          console.warn(`Multimodal message at index ${i} had text content truncated`);
+          validatedMessages[i] = {
+            ...message,
+            content: newContent
+          };
+        }
+      }
     }
   }
   
+  console.log(`Total message payload size: ${totalSize} characters`);
   return validatedMessages;
 }
 
@@ -106,7 +156,7 @@ serve(async (req) => {
   }
 
   const requestStartTime = Date.now();
-  console.log(`Request received at ${new Date().toISOString()}`);
+  console.log(`Anthropic proxy request received at ${new Date().toISOString()}`);
   
   try {
     // Validate request method
@@ -170,24 +220,19 @@ serve(async (req) => {
     
     // Check if the message payload is too large and validate/truncate if needed
     const validatedMessages = validateMessagePayload(payload.messages || []);
-    const messageSize = JSON.stringify(validatedMessages).length;
-    
-    if (messageSize > 100000) {
-      console.warn(`Large message payload: ${messageSize} bytes. This may cause timeouts.`);
-    }
     
     // Ensure model is set with better defaults for reliability
+    const model = payload.model || 'claude-3-sonnet-20240229';
+    console.log(`Using Anthropic model: ${model}`);
+    
     const requestPayload = {
-      model: payload.model || 'claude-3-sonnet-20240229',
+      model: model,
       max_tokens: payload.max_tokens || 4000,
       messages: validatedMessages,
       temperature: payload.temperature !== undefined ? payload.temperature : 0.7,
-      // Only add timeout parameter for API request
-      timeout: 18
     };
 
     // IMPORTANT: Only include response_format if it's provided in the original payload
-    // This is important because the Anthropic API treats this field specially
     if (payload.response_format && 
         typeof payload.response_format === 'object' && 
         payload.response_format.type) {
@@ -199,16 +244,15 @@ serve(async (req) => {
     console.log(`Making request to Anthropic API with ${requestPayload.messages.length} messages`);
     console.log(`Model: ${requestPayload.model}, Temperature: ${requestPayload.temperature}, Max tokens: ${requestPayload.max_tokens}`);
     
-    // Set up timeout handling with a shorter window (20 seconds)
-    // This ensures we can return a proper timeout response before the Edge Function itself times out
+    // Set up timeout handling - 25 seconds to ensure we can return before the Edge Function times out
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log("Request timed out after 20 seconds, aborting");
+      console.log("Request timed out after 25 seconds, aborting");
       controller.abort();
-    }, 20000);
+    }, 25000);
     
     try {
-      // Use the retry function for better reliability with shorter timeouts
+      // Use the retry function for better reliability
       const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -228,7 +272,6 @@ serve(async (req) => {
       
       const requestDuration = Date.now() - requestStartTime;
       console.log(`Anthropic API call completed successfully in ${requestDuration}ms`);
-      console.log(`Response content length: ${JSON.stringify(data).length} bytes`);
       
       // Return the successful response
       return new Response(
@@ -295,34 +338,17 @@ serve(async (req) => {
         );
       }
       
-      // Handle other API errors
-      if (fetchError.status) {
-        return new Response(
-          JSON.stringify({
-            error: {
-              message: `Anthropic API error: ${fetchError.status}. ${fetchError.details?.message || 'Please try again.'}`,
-              code: 'api_error',
-              details: { status: fetchError.status, error: fetchError.details }
-            }
-          }),
-          {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          }
-        );
-      }
-      
-      // Handle network errors or other unexpected issues
+      // Generic API error response
       return new Response(
         JSON.stringify({
           error: {
-            message: 'Error connecting to Anthropic API. Please check your network connection and try again.',
-            code: 'connection_error',
-            details: { name: fetchError.name, message: fetchError.message }
+            message: `Error connecting to Anthropic API: ${fetchError.message || 'Unknown error'}`,
+            code: 'api_error',
+            details: { status: fetchError.status, error: fetchError.details }
           }
         }),
         {
-          status: 502, // Bad Gateway
+          status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
