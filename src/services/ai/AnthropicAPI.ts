@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { ApiKeyService } from './ApiKeyService';
 import { AnthropicApiClient } from './AnthropicApiClient';
@@ -11,7 +10,7 @@ export class AnthropicAPI {
    */
   static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
     try {
-      // Get API key
+      // Get API key with improved error handling
       let apiKey;
       try {
         apiKey = await ApiKeyService.getApiKey('anthropic');
@@ -25,11 +24,11 @@ export class AnthropicAPI {
       // Validate messages
       AnthropicApiClient.validateMessages(messages);
       
-      // Check if messages are too large and truncate if necessary
+      // Check if messages are too large and warn if necessary
       const messageSize = JSON.stringify(messages).length;
       console.log("Message payload size:", messageSize, "bytes");
       
-      if (messageSize > 90000) {
+      if (messageSize > 80000) {
         console.warn("Message payload is very large, may cause timeouts");
         toast.warning("Analyzing a large document. This might take a bit longer than usual.", {
           duration: 5000,
@@ -38,7 +37,6 @@ export class AnthropicAPI {
       
       // Log request info
       console.log("Starting Anthropic API call with model claude-3-sonnet-20240229");
-      console.log("First message preview:", messages[0]?.content?.substring(0, 100) + "...");
       
       // Add a loading toast that will be dismissed on success or error
       const loadingToastId = toast.loading('Analyzing document with AI...', { 
@@ -46,87 +44,56 @@ export class AnthropicAPI {
       });
       
       try {
-        // Prepare payload - Remove response_format to avoid API errors
+        // Prepare payload
         const payload = {
           model: 'claude-3-sonnet-20240229',
           max_tokens: maxTokens,
           messages: messages,
-          temperature: 0.85 // Slightly higher temperature for more natural, human-like text
+          temperature: 0.7 // Slightly lower temperature for more reliable results
         };
 
         console.log("Using Supabase Edge Function to avoid CORS issues");
         
-        // Call via Supabase Edge Function with retry logic
-        // We'll try up to 2 times with exponential backoff
-        let data;
-        let error;
-        let attempts = 0;
-        const maxAttempts = 2;
-        
-        while (attempts <= maxAttempts) {
-          if (attempts > 0) {
-            console.log(`Retry attempt ${attempts}/${maxAttempts} for Anthropic API call`);
-            // Wait before retry with exponential backoff
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempts - 1)));
+        // Call via Supabase Edge Function
+        const result = await supabase.functions.invoke('anthropic-proxy', {
+          body: {
+            apiKey,
+            payload
           }
-          
-          const result = await supabase.functions.invoke('anthropic-proxy', {
-            body: {
-              apiKey,
-              payload
-            }
-          });
-          
-          data = result.data;
-          error = result.error;
-          
-          if (!error && data) {
-            // Success! Break out of retry loop
-            break;
-          }
-          
-          // If it's an API key error, don't retry
-          if (error && (
-            error.message?.includes('API key') || 
-            error.message?.includes('401')
-          )) {
-            break;
-          }
-          
-          attempts++;
-          if (attempts > maxAttempts) {
-            console.log("Max retry attempts reached");
-            break;
-          }
-        }
+        });
         
         // Clear the loading toast
         toast.dismiss(loadingToastId);
         
-        if (error) {
-          console.error('Edge function error:', error);
+        if (result.error) {
+          console.error('Edge function error:', result.error);
           
           // Handle specific error cases with user-friendly messages
-          if (error.message?.includes('timed out')) {
+          const errorMessage = result.error.message || '';
+          
+          if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
             toast.error('The analysis took too long to complete. Try with a smaller document or break your analysis into smaller parts.');
             throw new Error('Analysis timeout. Please try with less content.');
-          } else if (error.message?.includes('API key')) {
+          } else if (errorMessage.includes('API key') || errorMessage.includes('invalid_api_key')) {
             toast.error('Invalid API key. Please check your Anthropic API key in Settings.');
             throw new Error('Invalid API key. Please update it in Settings.');
+          } else if (errorMessage.includes('rate_limit')) {
+            toast.error('Rate limit exceeded. Please try again in a few minutes.');
+            throw new Error('Rate limit exceeded. Please try again later.');
           } else {
             toast.error('Error connecting to AI service. Please try again in a moment.');
-            throw new Error(`Edge Function error: ${error.message}`);
+            throw new Error(`Edge Function error: ${errorMessage}`);
           }
         }
         
-        if (!data) {
+        if (!result.data) {
           toast.error('No data returned from AI service. Please try again.');
           throw new Error('No data returned from edge function');
         }
         
         toast.success('Analysis completed successfully!');
         console.log("Anthropic API call via Edge Function completed successfully");
-        return data;
+        return result.data;
       } finally {
         // Ensure loading toast is dismissed in all cases
         toast.dismiss(loadingToastId);
@@ -134,7 +101,9 @@ export class AnthropicAPI {
     } catch (error) {
       console.error('Error calling Anthropic API:', error);
       // Show user-friendly toast if not already shown
-      if (!error.message?.includes('timeout') && !error.message?.includes('API key')) {
+      if (!error.message?.includes('timeout') && 
+          !error.message?.includes('API key') && 
+          !error.message?.includes('Rate limit')) {
         toast.error(error.message || 'Failed to connect to Anthropic API. Please try again later.');
       }
       throw error;
