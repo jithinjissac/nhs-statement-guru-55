@@ -45,7 +45,7 @@ export class AnthropicAPI {
       });
       
       try {
-        // Prepare payload
+        // Prepare payload - simplify to only include required fields
         const payload = {
           model: 'claude-3-sonnet-20240229',
           max_tokens: maxTokens,
@@ -81,6 +81,9 @@ export class AnthropicAPI {
           } else if (errorMessage.includes('rate_limit')) {
             toast.error('Rate limit exceeded. Please try again in a few minutes.');
             throw new Error('Rate limit exceeded. Please try again later.');
+          } else if (errorMessage.includes('invalid_request') || errorMessage.includes('extra fields')) {
+            toast.error('There was an issue with the request format. Try simplifying your analysis.');
+            throw new Error('Invalid request format. Please try again with simpler content.');
           } else {
             toast.error('Error connecting to AI service. Please try again in a moment.');
             throw new Error(`Edge Function error: ${errorMessage}`);
@@ -104,7 +107,8 @@ export class AnthropicAPI {
       // Show user-friendly toast if not already shown
       if (!error.message?.includes('timeout') && 
           !error.message?.includes('API key') && 
-          !error.message?.includes('Rate limit')) {
+          !error.message?.includes('Rate limit') &&
+          !error.message?.includes('Invalid request format')) {
         toast.error(error.message || 'Failed to connect to Anthropic API. Please try again later.');
       }
       throw error;

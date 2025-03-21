@@ -225,6 +225,7 @@ serve(async (req) => {
     const model = payload.model || 'claude-3-sonnet-20240229';
     console.log(`Using Anthropic model: ${model}`);
     
+    // Create a clean requestPayload with only the fields Anthropic expects
     const requestPayload = {
       model: model,
       max_tokens: payload.max_tokens || 4000,
@@ -316,6 +317,23 @@ serve(async (req) => {
           }),
           {
             status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      // Handle bad request errors (400)
+      if (fetchError.status === 400) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'Invalid request format. The request may contain extra fields or be incorrectly formatted.',
+              code: 'invalid_request',
+              details: fetchError.details || { status: fetchError.status }
+            }
+          }),
+          {
+            status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           }
         );
