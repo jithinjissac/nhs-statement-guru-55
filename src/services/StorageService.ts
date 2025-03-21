@@ -504,6 +504,28 @@ export class StorageService {
   }
   
   /**
+   * Get a secret from Supabase Edge Function secrets
+   */
+  static async getSecretFromSupabase(secretName: string): Promise<{data?: {value: string}, error?: any}> {
+    try {
+      // Call the Edge Function to retrieve the secret
+      const { data, error } = await supabase.functions.invoke('get-secret', {
+        body: { secretName }
+      });
+      
+      if (error) {
+        console.error(`Error getting secret ${secretName} from Supabase:`, error);
+        return { error };
+      }
+      
+      return { data };
+    } catch (error) {
+      console.error(`Error in getSecretFromSupabase for ${secretName}:`, error);
+      return { error };
+    }
+  }
+  
+  /**
    * Save settings to local storage (keeping this in local storage as it's user-specific)
    */
   static saveSettings(settings: Record<string, any>): void {
