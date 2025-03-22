@@ -1,6 +1,8 @@
 
 import { StorageService } from '../StorageService';
 import { toast } from 'sonner';
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from '@/contexts/AuthContext';
 
 export class ApiKeyService {
   /**
@@ -20,12 +22,20 @@ export class ApiKeyService {
       console.warn(`Error accessing local storage for ${provider} API key:`, error);
     }
     
-    // Try storage service as fallback
+    // Try authenticated storage service
     try {
-      const storedApiKey = await StorageService.getApiKeys();
-      if (storedApiKey && storedApiKey[provider]) {
-        console.log(`Using ${provider} API key from storage service`);
-        return storedApiKey[provider];
+      const { data: authData } = await supabase.auth.getSession();
+      const isAuthenticated = !!authData.session;
+      
+      if (isAuthenticated) {
+        console.log(`User is authenticated, trying to get ${provider} API key from database`);
+        const storedApiKey = await StorageService.getApiKeys();
+        if (storedApiKey && storedApiKey[provider]) {
+          console.log(`Using ${provider} API key from storage service`);
+          return storedApiKey[provider];
+        }
+      } else {
+        console.log(`User is not authenticated, skipping database API key lookup`);
       }
     } catch (storageError) {
       console.warn(`Error getting API key from storage service for ${provider}:`, storageError);

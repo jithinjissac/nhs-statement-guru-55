@@ -10,10 +10,22 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { AIService, AIModelConfig } from '@/services/ai';
 import { StorageService } from '@/services/StorageService';
-import { AlertCircle, CheckCircle2, Key, Info } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Key, Info, ShieldAlert } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from "@/integrations/supabase/client";
 
 const AdminSettings: React.FC = () => {
+  // Get authentication status
+  const { user, isAdmin } = useAuth();
+  const [authStatus, setAuthStatus] = useState<{
+    isAuthenticated: boolean;
+    isAdmin: boolean;
+  }>({
+    isAuthenticated: false,
+    isAdmin: false
+  });
+  
   // AI models settings
   const [models, setModels] = useState<AIModelConfig[]>(AIService.getModels());
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({
@@ -35,6 +47,29 @@ const AdminSettings: React.FC = () => {
   const [sampleStatementsCount, setSampleStatementsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
+  
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const authenticated = !!data.session;
+        setAuthStatus({
+          isAuthenticated: authenticated,
+          isAdmin: isAdmin()
+        });
+        console.log("Auth status:", authenticated ? "Authenticated" : "Not authenticated", isAdmin() ? "Admin" : "Not admin");
+      } catch (error) {
+        console.error("Error checking auth status:", error);
+        setAuthStatus({
+          isAuthenticated: false,
+          isAdmin: false
+        });
+      }
+    };
+    
+    checkAuth();
+  }, [user, isAdmin]);
   
   // Load saved settings on mount
   useEffect(() => {
@@ -228,12 +263,25 @@ const AdminSettings: React.FC = () => {
         </Button>
       </div>
       
+      {!authStatus.isAuthenticated && (
+        <Alert className="mb-6 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/30">
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>
+            You are not currently authenticated. API keys will be stored in local storage only, 
+            which means they will only be available on this device. Sign in to save settings to your account.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {usingFallback && (
         <Alert className="mb-6 bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/30">
           <Info className="h-4 w-4" />
           <AlertTitle>Using Local Storage</AlertTitle>
           <AlertDescription>
-            Due to database policy issues, some settings are being stored in local storage. 
+            {authStatus.isAuthenticated 
+              ? "Due to database policy issues, some settings are being stored in local storage."
+              : "You are not logged in, so settings are being stored in local storage only."}
             Your settings will still work, but they will be limited to this browser.
           </AlertDescription>
         </Alert>
@@ -264,7 +312,8 @@ const AdminSettings: React.FC = () => {
                 <AlertTitle>Important</AlertTitle>
                 <AlertDescription>
                   API keys are stored securely. Enter your API keys below to enable AI features.
-                  {usingFallback && " Currently using local storage due to database issues."}
+                  {!authStatus.isAuthenticated && " You are not logged in, so keys will only be stored in your browser."}
+                  {usingFallback && authStatus.isAuthenticated && " Currently using local storage due to database issues."}
                 </AlertDescription>
               </Alert>
               

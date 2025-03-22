@@ -497,26 +497,33 @@ export class StorageService {
       this.saveApiKeyToLocalStorage(provider, keyValue);
       console.log(`Successfully saved ${provider} API key to local storage`);
       
-      // Attempt Supabase as secondary, but don't rely on it succeeding
-      try {
-        const id = uuidv4();
-        const { error } = await supabase
-          .from('api_keys')
-          .insert({
-            id: id,
-            name: provider,
-            key: keyValue,
-            active: true,
-            created_by: 'system' // Set a default value to satisfy the schema
-          });
-        
-        if (error) {
-          console.warn(`Non-critical DB error saving API key: ${error.message}`);
-        } else {
-          console.log(`Successfully saved ${provider} API key to database as backup`);
+      // Check if user is authenticated before attempting Supabase operations
+      const { data: authData } = await supabase.auth.getSession();
+      const isAuthenticated = !!authData.session;
+      
+      if (isAuthenticated) {
+        try {
+          const id = uuidv4();
+          const { error } = await supabase
+            .from('api_keys')
+            .insert({
+              id: id,
+              name: provider,
+              key: keyValue,
+              active: true,
+              created_by: authData.session.user.id // Use actual user ID
+            });
+          
+          if (error) {
+            console.warn(`Non-critical DB error saving API key: ${error.message}`);
+          } else {
+            console.log(`Successfully saved ${provider} API key to database as backup`);
+          }
+        } catch (dbError) {
+          console.warn(`Non-critical database error saving API key: ${dbError}. Using local storage.`);
         }
-      } catch (dbError) {
-        console.warn(`Non-critical database error saving API key: ${dbError}. Using local storage.`);
+      } else {
+        console.log(`User is not authenticated, skipping database API key storage`);
       }
     } catch (error) {
       console.error('Error in saveApiKey:', error);
@@ -555,29 +562,37 @@ export class StorageService {
       const localKeys = this.getApiKeysFromLocalStorage();
       console.log("Local storage keys found:", Object.keys(localKeys));
       
-      // Try to get from Supabase as additional source, but don't block on error
-      try {
-        const { data, error } = await supabase
-          .from('api_keys')
-          .select('*')
-          .eq('active', true);
-        
-        if (error) {
-          console.warn(`Non-critical DB error getting API keys: ${error.message}. Using only local storage.`);
+      // Check if user is authenticated before attempting Supabase operations
+      const { data: authData } = await supabase.auth.getSession();
+      const isAuthenticated = !!authData.session;
+      
+      if (isAuthenticated) {
+        try {
+          const { data, error } = await supabase
+            .from('api_keys')
+            .select('*')
+            .eq('active', true);
+          
+          if (error) {
+            console.warn(`Non-critical DB error getting API keys: ${error.message}. Using only local storage.`);
+            return localKeys;
+          }
+          
+          // Merge keys from database with local keys
+          const dbKeys: Record<string, string> = {};
+          (data || []).forEach(item => {
+            dbKeys[item.name.toLowerCase()] = item.key;
+          });
+          console.log("Database keys found:", Object.keys(dbKeys));
+          
+          // Local keys take precedence over DB keys (more likely to be up-to-date)
+          return { ...dbKeys, ...localKeys };
+        } catch (dbError) {
+          console.warn(`Non-critical database error getting API keys: ${dbError}. Using only local storage.`);
           return localKeys;
         }
-        
-        // Merge keys from database with local keys
-        const dbKeys: Record<string, string> = {};
-        (data || []).forEach(item => {
-          dbKeys[item.name.toLowerCase()] = item.key;
-        });
-        console.log("Database keys found:", Object.keys(dbKeys));
-        
-        // Local keys take precedence over DB keys (more likely to be up-to-date)
-        return { ...dbKeys, ...localKeys };
-      } catch (dbError) {
-        console.warn(`Non-critical database error getting API keys: ${dbError}. Using only local storage.`);
+      } else {
+        console.log("User is not authenticated, using only local storage for API keys");
         return localKeys;
       }
     } catch (error) {
