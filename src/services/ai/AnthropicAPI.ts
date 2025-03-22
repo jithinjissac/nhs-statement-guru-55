@@ -38,7 +38,7 @@ export class AnthropicAPI {
       if (messageSize > 80000) {
         console.warn("Message payload is very large, may cause timeouts");
         updateProgress?.('Preparing large document for analysis...', 15);
-        toast.warning("Analyzing a large document. This might take up to a minute or more.", {
+        toast.warning("Analyzing a large document. This might take up to 2 minutes or more.", {
           duration: 10000,
         });
       } else {
@@ -51,7 +51,7 @@ export class AnthropicAPI {
       
       // Add a loading toast that will be dismissed on success or error
       const loadingToastId = toast.loading('Analyzing document with AI...', { 
-        duration: 120000 // Extended duration for larger documents
+        duration: 180000 // Extended duration to 3 minutes for larger documents
       });
       
       try {
@@ -75,7 +75,7 @@ export class AnthropicAPI {
             // Gradually increase progress up to 90% (save last 10% for actual response processing)
             if (currentProgress < 90) {
               // Slower progress increases for larger payloads
-              const increment = messageSize > 50000 ? 2 : messageSize > 20000 ? 4 : 6;
+              const increment = messageSize > 50000 ? 1 : messageSize > 20000 ? 2 : 4;
               currentProgress = Math.min(90, currentProgress + increment);
               
               const statusMessages = [
@@ -101,7 +101,9 @@ export class AnthropicAPI {
             body: {
               apiKey,
               payload
-            }
+            },
+            // No timeout option available in supabase.functions.invoke
+            // We'll handle timeout in the edge function itself
           });
           
           // Clear the progress interval if it exists
@@ -118,12 +120,25 @@ export class AnthropicAPI {
           if (result.error) {
             console.error('Edge function error:', result.error);
             
+            // If the error is likely a timeout, try with direct fetch as a fallback
+            if (result.error.message?.includes('timeout') || 
+                result.error.message?.includes('timed out') ||
+                result.error.status === 504) {
+              
+              console.log("Edge function timed out, trying direct fetch as fallback");
+              updateProgress?.('Edge function timed out, trying direct approach...', 60);
+              
+              // Try with direct fetch as fallback
+              return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
+            }
+            
             // Handle specific error cases with user-friendly messages
             const errorMessage = result.error.message || '';
             
             if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-              toast.error('The analysis took too long to complete. Try with a smaller document or break your analysis into smaller parts.');
-              throw new Error('Analysis timeout. Please try with less content.');
+              toast.error('The analysis took too long to complete. The app will try a different approach now.');
+              // Try with direct fetch as fallback
+              return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
             } else if (errorMessage.includes('API key') || errorMessage.includes('invalid_api_key')) {
               toast.error('Invalid API key. Please check your Anthropic API key in Settings.');
               throw new Error('Invalid API key. Please update it in Settings.');
@@ -134,14 +149,16 @@ export class AnthropicAPI {
               toast.error('There was an issue with the request format. Try simplifying your analysis.');
               throw new Error('Invalid request format. Please try again with simpler content.');
             } else {
-              toast.error('Error connecting to AI service. Please try again in a moment.');
-              throw new Error(`Edge Function error: ${errorMessage}`);
+              toast.error('Error connecting to AI service. Trying alternative method...');
+              // Try with direct fetch as fallback
+              return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
             }
           }
           
           if (!result.data) {
-            toast.error('No data returned from AI service. Please try again.');
-            throw new Error('No data returned from edge function');
+            toast.error('No data returned from AI service. Trying alternative method...');
+            // Try with direct fetch as fallback
+            return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
           }
           
           // Update progress to 100%
@@ -155,7 +172,12 @@ export class AnthropicAPI {
           if (progressInterval !== null) {
             clearInterval(progressInterval);
           }
-          throw error;
+          
+          console.error("Error with Edge Function, trying direct fetch:", error);
+          updateProgress?.('Trying alternative approach...', 60);
+          
+          // Try with direct fetch as fallback
+          return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
         }
       } finally {
         // Ensure loading toast is dismissed in all cases
@@ -170,6 +192,59 @@ export class AnthropicAPI {
           !error.message?.includes('Invalid request format')) {
         toast.error(error.message || 'Failed to connect to Anthropic API. Please try again later.');
       }
+      throw error;
+    }
+  }
+
+  /**
+   * Direct fetch to Anthropic API as fallback when the Edge Function fails
+   */
+  static async directFetchCallAnthropic(
+    apiKey: string, 
+    payload: any,
+    updateProgress?: (status: string, percent: number) => void
+  ): Promise<any> {
+    console.log("Attempting direct fetch to Anthropic API");
+    updateProgress?.('Trying direct connection to AI service...', 65);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 120000); // 2 minute timeout
+    
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Anthropic API error: ${errorData.error?.message || response.statusText}`);
+      }
+      
+      updateProgress?.('Processing AI response...', 95);
+      const data = await response.json();
+      
+      updateProgress?.('Analysis complete!', 100);
+      toast.success('Analysis completed successfully with direct method!');
+      
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        throw new Error('The request timed out after 2 minutes. Please try with less content.');
+      }
+      
       throw error;
     }
   }
