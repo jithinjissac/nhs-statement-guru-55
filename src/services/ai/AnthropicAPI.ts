@@ -120,12 +120,22 @@ export class AnthropicAPI {
    */
   static async getNHSStatementResources() {
     try {
-      // Dynamically fetch all guidelines from storage service
-      const guidelines = await StorageService.getGuidelines();
-      // Dynamically fetch all sample statements from storage service
-      const sampleStatements = await StorageService.getSampleStatements();
+      // Directly fetch from local storage for reliability with database issues
+      const getLocalGuidelines = () => {
+        const guidelinesJSON = localStorage.getItem('nhs_guidelines');
+        return guidelinesJSON ? JSON.parse(guidelinesJSON) : [];
+      };
       
-      console.log(`Dynamically retrieved ${guidelines.length} guidelines and ${sampleStatements.length} sample statements for AI enhancement`);
+      const getLocalSampleStatements = () => {
+        const samplesJSON = localStorage.getItem('nhs_samples');
+        return samplesJSON ? JSON.parse(samplesJSON) : [];
+      };
+      
+      // Get data from local storage - more reliable with current DB issues
+      const guidelines = getLocalGuidelines();
+      const sampleStatements = getLocalSampleStatements();
+      
+      console.log(`Retrieved ${guidelines.length} guidelines and ${sampleStatements.length} sample statements from local storage`);
       
       // Additional NHS supporting statement guidelines - these complement the user-added guidelines
       const nhsSupportingStatementGuidelines = [
@@ -155,7 +165,7 @@ export class AnthropicAPI {
         }
       ];
       
-      // Combine dynamically fetched guidelines with the NHS-specific ones
+      // Combine locally fetched guidelines with the NHS-specific ones
       const enhancedGuidelines = [...guidelines, ...nhsSupportingStatementGuidelines];
       
       return {

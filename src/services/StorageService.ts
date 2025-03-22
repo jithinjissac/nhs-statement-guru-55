@@ -25,7 +25,8 @@ export type ApiKey = {
 
 export class StorageService {
   /**
-   * Save a guideline to Supabase
+   * Save a guideline to Supabase and local storage
+   * Prioritizing local storage for reliability
    */
   static async saveGuideline(guideline: Guideline): Promise<void> {
     try {
@@ -33,35 +34,43 @@ export class StorageService {
         guideline.id = uuidv4();
       }
       
-      // Format the data properly for Supabase upsert
-      const { error } = await supabase
-        .from('rules')
-        .upsert({
-          id: guideline.id,
-          title: guideline.title,
-          content: guideline.content,
-          created_at: guideline.dateAdded ? guideline.dateAdded : new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          // Adding required fields
-          created_by: guideline.id, // This is a workaround as we don't have auth yet
-          file_name: null,
-          file_url: null
-        });
-      
-      if (error) throw error;
-      
-      // Also save to local storage as backup
+      // Always save to local storage first for reliability
       this.saveGuidelineToLocalStorage(guideline);
+      console.log(`Successfully saved guideline "${guideline.title}" to local storage`);
+      
+      // Attempt to save to Supabase as backup, but don't block or fail if it doesn't work
+      try {
+        const { error } = await supabase
+          .from('rules')
+          .upsert({
+            id: guideline.id,
+            title: guideline.title,
+            content: guideline.content,
+            created_at: guideline.dateAdded ? guideline.dateAdded : new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            created_by: guideline.id, // This is a workaround as we don't have auth yet
+            file_name: null,
+            file_url: null
+          });
+        
+        if (error) {
+          console.warn(`Non-critical database error saving guideline: ${error.message}. Using local storage only.`);
+        } else {
+          console.log(`Successfully saved guideline "${guideline.title}" to database as backup`);
+        }
+      } catch (dbError) {
+        console.warn(`Non-critical database error saving guideline: ${dbError}. Using local storage only.`);
+      }
     } catch (error) {
       console.error('Error saving guideline:', error);
-      // Fallback to local storage
+      // Emergency fallback to ensure it's always saved somewhere
       this.saveGuidelineToLocalStorage(guideline);
       throw error;
     }
   }
   
   /**
-   * Save guideline to local storage as backup
+   * Save guideline to local storage
    */
   private static saveGuidelineToLocalStorage(guideline: Guideline): void {
     try {
@@ -91,35 +100,67 @@ export class StorageService {
   }
   
   /**
-   * Get all guidelines from Supabase
+   * Get all guidelines - prioritizing local storage for reliability
    */
   static async getGuidelines(): Promise<Guideline[]> {
     try {
-      const { data, error } = await supabase
-        .from('rules')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Always get from localStorage first as reliable source
+      const localGuidelines = this.getGuidelinesFromLocalStorage();
+      console.log(`Found ${localGuidelines.length} guidelines in local storage`);
       
-      if (error) {
-        console.error('Database error getting guidelines:', error);
-        // Fall back to local storage
-        return this.getGuidelinesFromLocalStorage();
+      // Try to get from Supabase as additional source, but don't block on error
+      try {
+        const { data, error } = await supabase
+          .from('rules')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.warn(`Non-critical database error getting guidelines: ${error.message}. Using local storage only.`);
+          return localGuidelines;
+        }
+        
+        // Convert DB format to app format
+        const dbGuidelines = (data || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          content: item.content,
+          dateAdded: item.created_at
+        }));
+        
+        // Merge guidelines from both sources
+        // Create a map for quick lookup
+        const guidelinesMap = new Map<string, Guideline>();
+        
+        // Add DB guidelines first
+        dbGuidelines.forEach(guideline => {
+          guidelinesMap.set(guideline.id, guideline);
+        });
+        
+        // Local guidelines override DB ones if they exist
+        localGuidelines.forEach(guideline => {
+          guidelinesMap.set(guideline.id, guideline);
+        });
+        
+        // Convert back to array
+        const mergedGuidelines = Array.from(guidelinesMap.values());
+        
+        // Sort by date (newest first)
+        mergedGuidelines.sort((a, b) => {
+          return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
+        });
+        
+        // Update local storage with merged results to keep them in sync
+        localStorage.setItem('nhs_guidelines', JSON.stringify(mergedGuidelines));
+        
+        return mergedGuidelines;
+      } catch (dbError) {
+        console.warn(`Non-critical database error getting guidelines: ${dbError}. Using local storage only.`);
+        return localGuidelines;
       }
-      
-      const guidelines = (data || []).map(item => ({
-        id: item.id,
-        title: item.title,
-        content: item.content,
-        dateAdded: item.created_at
-      }));
-      
-      // Also update local storage with the latest
-      localStorage.setItem('nhs_guidelines', JSON.stringify(guidelines));
-      
-      return guidelines;
     } catch (error) {
       console.error('Failed to fetch guidelines:', error);
-      // Fall back to local storage
+      // Fall back to local storage in case of any error
       return this.getGuidelinesFromLocalStorage();
     }
   }
@@ -165,22 +206,32 @@ export class StorageService {
   }
   
   /**
-   * Delete a guideline from Supabase
+   * Delete a guideline - prioritizing local storage for reliability
    */
   static async deleteGuideline(id: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('rules')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      // Also delete from local storage
+      // Delete from local storage first for immediate user feedback
       this.deleteGuidelineFromLocalStorage(id);
+      console.log(`Deleted guideline ${id} from local storage`);
+      
+      // Try to delete from Supabase as well, but don't block if it fails
+      try {
+        const { error } = await supabase
+          .from('rules')
+          .delete()
+          .eq('id', id);
+        
+        if (error) {
+          console.warn(`Non-critical database error deleting guideline: ${error.message}`);
+        } else {
+          console.log(`Successfully deleted guideline ${id} from database`);
+        }
+      } catch (dbError) {
+        console.warn(`Non-critical database error deleting guideline: ${dbError}`);
+      }
     } catch (error) {
       console.error('Error deleting guideline:', error);
-      // Try local storage deletion anyway
+      // Make sure we at least try local storage
       this.deleteGuidelineFromLocalStorage(id);
       throw error;
     }
@@ -205,7 +256,7 @@ export class StorageService {
   }
   
   /**
-   * Save a sample statement to Supabase
+   * Save a sample statement - prioritizing local storage for reliability
    */
   static async saveSampleStatement(sample: SampleStatement): Promise<void> {
     try {
@@ -213,34 +264,42 @@ export class StorageService {
         sample.id = uuidv4();
       }
       
-      // Format the data properly for Supabase upsert
-      const { error } = await supabase
-        .from('sample_statements')
-        .upsert({
-          id: sample.id,
-          title: sample.title,
-          content: sample.content,
-          category: sample.category || 'general',
-          // Adding required fields
-          created_at: sample.dateAdded ? sample.dateAdded : new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          created_by: sample.id // This is a workaround as we don't have auth yet
-        });
-      
-      if (error) throw error;
-      
-      // Also save to local storage as backup
+      // Always save to local storage first for reliability
       this.saveSampleStatementToLocalStorage(sample);
+      console.log(`Successfully saved sample "${sample.title}" to local storage`);
+      
+      // Attempt to save to Supabase as backup, but don't block if it fails
+      try {
+        const { error } = await supabase
+          .from('sample_statements')
+          .upsert({
+            id: sample.id,
+            title: sample.title,
+            content: sample.content,
+            category: sample.category || 'general',
+            created_at: sample.dateAdded ? sample.dateAdded : new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            created_by: sample.id // This is a workaround as we don't have auth yet
+          });
+        
+        if (error) {
+          console.warn(`Non-critical database error saving sample: ${error.message}. Using local storage only.`);
+        } else {
+          console.log(`Successfully saved sample "${sample.title}" to database as backup`);
+        }
+      } catch (dbError) {
+        console.warn(`Non-critical database error saving sample: ${dbError}. Using local storage only.`);
+      }
     } catch (error) {
       console.error('Error saving sample statement:', error);
-      // Fallback to local storage
+      // Emergency fallback
       this.saveSampleStatementToLocalStorage(sample);
       throw error;
     }
   }
   
   /**
-   * Save sample statement to local storage as backup
+   * Save sample statement to local storage
    */
   private static saveSampleStatementToLocalStorage(sample: SampleStatement): void {
     try {
@@ -270,37 +329,67 @@ export class StorageService {
   }
   
   /**
-   * Get all sample statements from Supabase
+   * Get all sample statements - prioritizing local storage for reliability
    */
   static async getSampleStatements(): Promise<SampleStatement[]> {
     try {
-      const { data, error } = await supabase
-        .from('sample_statements')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Always get from localStorage first as reliable source
+      const localSamples = this.getSampleStatementsFromLocalStorage();
+      console.log(`Found ${localSamples.length} samples in local storage`);
       
-      if (error) {
-        console.error('Database error getting sample statements:', error);
-        // Fall back to local storage
-        return this.getSampleStatementsFromLocalStorage();
+      // Try to get from Supabase as additional source, but don't block on error
+      try {
+        const { data, error } = await supabase
+          .from('sample_statements')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.warn(`Non-critical database error getting samples: ${error.message}. Using local storage only.`);
+          return localSamples;
+        }
+        
+        // Convert DB format to app format
+        const dbSamples = (data || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          content: item.content,
+          category: item.category || 'general',
+          dateAdded: item.created_at
+        }));
+        
+        // Merge samples from both sources
+        // Create a map for quick lookup
+        const samplesMap = new Map<string, SampleStatement>();
+        
+        // Add DB samples first
+        dbSamples.forEach(sample => {
+          samplesMap.set(sample.id, sample);
+        });
+        
+        // Local samples override DB ones if they exist
+        localSamples.forEach(sample => {
+          samplesMap.set(sample.id, sample);
+        });
+        
+        // Convert back to array
+        const mergedSamples = Array.from(samplesMap.values());
+        
+        // Sort by date (newest first)
+        mergedSamples.sort((a, b) => {
+          return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
+        });
+        
+        // Update local storage with merged results to keep them in sync
+        localStorage.setItem('nhs_samples', JSON.stringify(mergedSamples));
+        
+        return mergedSamples;
+      } catch (dbError) {
+        console.warn(`Non-critical database error getting samples: ${dbError}. Using local storage only.`);
+        return localSamples;
       }
-      
-      const samples = (data || []).map(item => ({
-        id: item.id,
-        title: item.title,
-        content: item.content,
-        // Now we can directly access the category field from the database
-        category: item.category || 'general',
-        dateAdded: item.created_at
-      }));
-      
-      // Also update local storage with the latest
-      localStorage.setItem('nhs_samples', JSON.stringify(samples));
-      
-      return samples;
     } catch (error) {
       console.error('Failed to fetch sample statements:', error);
-      // Fall back to local storage
       return this.getSampleStatementsFromLocalStorage();
     }
   }
@@ -348,22 +437,32 @@ export class StorageService {
   }
   
   /**
-   * Delete a sample statement from Supabase
+   * Delete a sample statement - prioritizing local storage for reliability
    */
   static async deleteSampleStatement(id: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('sample_statements')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      // Also delete from local storage
+      // Delete from local storage first for immediate user feedback
       this.deleteSampleStatementFromLocalStorage(id);
+      console.log(`Deleted sample ${id} from local storage`);
+      
+      // Try to delete from Supabase as well, but don't block if it fails
+      try {
+        const { error } = await supabase
+          .from('sample_statements')
+          .delete()
+          .eq('id', id);
+        
+        if (error) {
+          console.warn(`Non-critical database error deleting sample: ${error.message}`);
+        } else {
+          console.log(`Successfully deleted sample ${id} from database`);
+        }
+      } catch (dbError) {
+        console.warn(`Non-critical database error deleting sample: ${dbError}`);
+      }
     } catch (error) {
       console.error('Error deleting sample statement:', error);
-      // Try local storage deletion anyway
+      // Make sure we at least try local storage
       this.deleteSampleStatementFromLocalStorage(id);
       throw error;
     }
@@ -389,7 +488,6 @@ export class StorageService {
   
   /**
    * Save an API key - prioritizing local storage as more reliable
-   * instead of dealing with Supabase policy issues
    */
   static async saveApiKey(provider: string, keyValue: string): Promise<void> {
     try {
