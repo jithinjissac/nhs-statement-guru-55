@@ -25,7 +25,7 @@ const Progress = React.forwardRef<
       )}
       style={{ 
         transform: `translateX(-${100 - (value || 0)}%)`,
-        transitionDuration: "0.5s",
+        transitionDuration: "0.8s",
         transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)" 
       }}
     />

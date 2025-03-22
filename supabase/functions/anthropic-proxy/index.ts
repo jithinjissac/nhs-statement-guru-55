@@ -245,12 +245,13 @@ serve(async (req) => {
     console.log(`Making request to Anthropic API with ${requestPayload.messages.length} messages`);
     console.log(`Model: ${requestPayload.model}, Temperature: ${requestPayload.temperature}, Max tokens: ${requestPayload.max_tokens}`);
     
-    // Set up timeout handling - 25 seconds to ensure we can return before the Edge Function times out
+    // Set up timeout handling - significantly increased timeout for handling large content
+    // Edge Function has a 60s timeout, so we'll use 55s as maximum to ensure we can return a proper response
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log("Request timed out after 25 seconds, aborting");
+      console.log("Request timed out after 55 seconds, aborting");
       controller.abort();
-    }, 25000);
+    }, 55000); // Increased from 25s to 55s to allow for longer processing
     
     try {
       // Use the retry function for better reliability
@@ -293,7 +294,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: {
-              message: 'Request timed out. The analysis request may be too complex or large. Try with less content or break it into smaller pieces.',
+              message: 'Request timed out after 55 seconds. The analysis request may be too complex or large. Try with less content or break it into smaller pieces.',
               code: 'timeout',
               details: { name: fetchError.name }
             }

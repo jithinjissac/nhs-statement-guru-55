@@ -9,11 +9,16 @@ export class AnthropicAPI {
   /**
    * Call to Anthropic API for analysis
    */
-  static async callAnthropic(messages: any[], maxTokens: number = 4000): Promise<any> {
+  static async callAnthropic(
+    messages: any[], 
+    maxTokens: number = 4000, 
+    updateProgress?: (status: string, percent: number) => void
+  ): Promise<any> {
     try {
       // Get API key with improved error handling
       let apiKey;
       try {
+        updateProgress?.('Retrieving API key...', 5);
         apiKey = await ApiKeyService.getApiKey('anthropic');
         console.log("API key available:", apiKey ? "Yes" : "No");
       } catch (keyError) {
@@ -23,6 +28,7 @@ export class AnthropicAPI {
       }
       
       // Validate messages
+      updateProgress?.('Validating content...', 10);
       AnthropicApiClient.validateMessages(messages);
       
       // Check if messages are too large and warn if necessary
@@ -31,17 +37,21 @@ export class AnthropicAPI {
       
       if (messageSize > 80000) {
         console.warn("Message payload is very large, may cause timeouts");
-        toast.warning("Analyzing a large document. This might take a bit longer than usual.", {
-          duration: 5000,
+        updateProgress?.('Preparing large document for analysis...', 15);
+        toast.warning("Analyzing a large document. This might take up to a minute or more.", {
+          duration: 10000,
         });
+      } else {
+        updateProgress?.('Preparing document for analysis...', 15);
       }
       
       // Log request info
       console.log("Starting Anthropic API call with model claude-3-sonnet-20240229");
+      updateProgress?.('Connecting to AI service...', 20);
       
       // Add a loading toast that will be dismissed on success or error
       const loadingToastId = toast.loading('Analyzing document with AI...', { 
-        duration: 60000 // Long duration that will be dismissed on completion
+        duration: 120000 // Extended duration for larger documents
       });
       
       try {
@@ -54,50 +64,99 @@ export class AnthropicAPI {
         };
 
         console.log("Using Supabase Edge Function to avoid CORS issues");
+        updateProgress?.('Sending data to AI service...', 25);
         
-        // Call via Supabase Edge Function
-        const result = await supabase.functions.invoke('anthropic-proxy', {
-          body: {
-            apiKey,
-            payload
-          }
-        });
+        // Add progress simulation for long-running requests
+        let progressInterval: number | null = null;
+        let currentProgress = 25;
         
-        // Clear the loading toast
-        toast.dismiss(loadingToastId);
-        
-        if (result.error) {
-          console.error('Edge function error:', result.error);
-          
-          // Handle specific error cases with user-friendly messages
-          const errorMessage = result.error.message || '';
-          
-          if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-            toast.error('The analysis took too long to complete. Try with a smaller document or break your analysis into smaller parts.');
-            throw new Error('Analysis timeout. Please try with less content.');
-          } else if (errorMessage.includes('API key') || errorMessage.includes('invalid_api_key')) {
-            toast.error('Invalid API key. Please check your Anthropic API key in Settings.');
-            throw new Error('Invalid API key. Please update it in Settings.');
-          } else if (errorMessage.includes('rate_limit')) {
-            toast.error('Rate limit exceeded. Please try again in a few minutes.');
-            throw new Error('Rate limit exceeded. Please try again later.');
-          } else if (errorMessage.includes('invalid_request') || errorMessage.includes('extra fields')) {
-            toast.error('There was an issue with the request format. Try simplifying your analysis.');
-            throw new Error('Invalid request format. Please try again with simpler content.');
-          } else {
-            toast.error('Error connecting to AI service. Please try again in a moment.');
-            throw new Error(`Edge Function error: ${errorMessage}`);
-          }
+        if (updateProgress) {
+          progressInterval = window.setInterval(() => {
+            // Gradually increase progress up to 90% (save last 10% for actual response processing)
+            if (currentProgress < 90) {
+              // Slower progress increases for larger payloads
+              const increment = messageSize > 50000 ? 2 : messageSize > 20000 ? 4 : 6;
+              currentProgress = Math.min(90, currentProgress + increment);
+              
+              const statusMessages = [
+                'AI analyzing your documents...',
+                'Matching your CV with job requirements...',
+                'Processing experience details...',
+                'Identifying skill matches...',
+                'Analyzing qualifications...',
+                'Building response...'
+              ];
+              
+              const statusIndex = Math.floor((currentProgress - 25) / 15);
+              const status = statusMessages[Math.min(statusIndex, statusMessages.length - 1)];
+              
+              updateProgress(status, currentProgress);
+            }
+          }, 1000); // Update every second
         }
         
-        if (!result.data) {
-          toast.error('No data returned from AI service. Please try again.');
-          throw new Error('No data returned from edge function');
+        try {
+          // Call via Supabase Edge Function with increased timeout handling
+          const result = await supabase.functions.invoke('anthropic-proxy', {
+            body: {
+              apiKey,
+              payload
+            }
+          });
+          
+          // Clear the progress interval if it exists
+          if (progressInterval !== null) {
+            clearInterval(progressInterval);
+          }
+          
+          // Set progress to 95% to indicate we're processing the response
+          updateProgress?.('Processing AI response...', 95);
+          
+          // Clear the loading toast
+          toast.dismiss(loadingToastId);
+          
+          if (result.error) {
+            console.error('Edge function error:', result.error);
+            
+            // Handle specific error cases with user-friendly messages
+            const errorMessage = result.error.message || '';
+            
+            if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+              toast.error('The analysis took too long to complete. Try with a smaller document or break your analysis into smaller parts.');
+              throw new Error('Analysis timeout. Please try with less content.');
+            } else if (errorMessage.includes('API key') || errorMessage.includes('invalid_api_key')) {
+              toast.error('Invalid API key. Please check your Anthropic API key in Settings.');
+              throw new Error('Invalid API key. Please update it in Settings.');
+            } else if (errorMessage.includes('rate_limit')) {
+              toast.error('Rate limit exceeded. Please try again in a few minutes.');
+              throw new Error('Rate limit exceeded. Please try again later.');
+            } else if (errorMessage.includes('invalid_request') || errorMessage.includes('extra fields')) {
+              toast.error('There was an issue with the request format. Try simplifying your analysis.');
+              throw new Error('Invalid request format. Please try again with simpler content.');
+            } else {
+              toast.error('Error connecting to AI service. Please try again in a moment.');
+              throw new Error(`Edge Function error: ${errorMessage}`);
+            }
+          }
+          
+          if (!result.data) {
+            toast.error('No data returned from AI service. Please try again.');
+            throw new Error('No data returned from edge function');
+          }
+          
+          // Update progress to 100%
+          updateProgress?.('Analysis complete!', 100);
+          
+          toast.success('Analysis completed successfully!');
+          console.log("Anthropic API call via Edge Function completed successfully");
+          return result.data;
+        } catch (error) {
+          // Clear the progress interval if it exists
+          if (progressInterval !== null) {
+            clearInterval(progressInterval);
+          }
+          throw error;
         }
-        
-        toast.success('Analysis completed successfully!');
-        console.log("Anthropic API call via Edge Function completed successfully");
-        return result.data;
       } finally {
         // Ensure loading toast is dismissed in all cases
         toast.dismiss(loadingToastId);
