@@ -1,8 +1,8 @@
-
 import { AnthropicAPI } from './AnthropicAPI';
 import { ExtractionService } from './ExtractionService';
 import { MatchingService } from './MatchingService';
 import { CVAnalysisResult } from './types';
+import { PromptService } from '../PromptService';
 
 export class AnalysisService {
   /**
@@ -24,46 +24,21 @@ export class AnalysisService {
       // Prepare the prompt for Anthropic
       progressCallback?.('Preparing CV analysis', 15);
       
+      // Get the prompt template and process it with variables
+      const promptContent = await PromptService.getProcessedPrompt('cv_analysis', {
+        cv,
+        jobDescription,
+        additionalExperience: additionalExperience ? `Additional context provided by the applicant:\n${additionalExperience}` : ''
+      });
+      
+      if (!promptContent) {
+        throw new Error('Failed to load CV analysis prompt. Please contact support.');
+      }
+      
       const messages = [
         {
           role: "user",
-          content: `I need you to analyze a CV against a job description to help prepare a supporting statement. Here's the CV:
-
-${cv}
-
-Here's the job description:
-
-${jobDescription}
-
-${additionalExperience ? `Additional context provided by the applicant:
-${additionalExperience}` : ''}
-
-Please analyze the CV against the job description and provide a structured JSON response with the following information:
-1. Relevant skills found in the CV (list of strings)
-2. Relevant experience categorized as: clinical, non-clinical, and administrative (lists of strings), along with estimated years of experience
-3. Job requirements from the description that match content in the CV, with specific evidence from the CV
-4. Job requirements from the description that are not evidenced in the CV
-5. Recommended highlights to focus on in a supporting statement
-6. NHS values mentioned in the job description
-7. Education qualifications from the CV
-
-Return ONLY a valid JSON object with the following structure (no extra text before or after):
-{
-  "relevantSkills": ["skill1", "skill2", ...],
-  "relevantExperience": {
-    "clinical": ["experience1", "experience2", ...],
-    "nonClinical": ["experience1", "experience2", ...],
-    "administrative": ["experience1", "experience2", ...],
-    "yearsOfExperience": number
-  },
-  "matchedRequirements": [
-    {"requirement": "text", "evidence": "text", "keywords": ["keyword1", "keyword2"]}
-  ],
-  "missingRequirements": ["requirement1", "requirement2", ...],
-  "recommendedHighlights": ["highlight1", "highlight2", ...],
-  "nhsValues": ["value1", "value2", ...],
-  "education": ["qualification1", "qualification2", ...]
-}`
+          content: promptContent
         }
       ];
       
@@ -363,83 +338,40 @@ ${s.content.substring(0, 800)}...`).join('\n\n---\n\n');
       const adminExp = analysis.relevantExperience.administrative.join(', ');
       const education = analysis.education.join(', ');
       
-      // Create the enhanced prompt for human-like statement generation
+      progressCallback?.('Getting statement generation prompt', 58);
+      
+      // Get the statement generation prompt from the database
+      const promptContent = await PromptService.getProcessedPrompt('statement_generation', {
+        cv,
+        jobDescription,
+        skills,
+        clinicalExp,
+        nonClinicalExp,
+        adminExp,
+        yearsExperience: analysis.relevantExperience.yearsOfExperience,
+        education,
+        matchedRequirements,
+        missingRequirements,
+        highlights,
+        nhsValues,
+        additionalInfo: additionalInfo ? `Additional Information Provided by Applicant:\n${additionalInfo}` : '',
+        guidelineContent,
+        samplesContent,
+        audienceLevel
+      });
+      
+      if (!promptContent) {
+        throw new Error('Failed to load statement generation prompt. Please contact support.');
+      }
+      
+      progressCallback?.('Generating statement', 60);
       const messages = [
         {
-          role: "system",
-          content: `You are an expert NHS career advisor who writes authentic, personalized supporting statements. Your statements have the following qualities:
-
-1. They sound completely natural, as if written by the actual applicant
-2. They vary sentence structure, length, and complexity for a natural flow
-3. They use first-person perspective with genuine reflections and emotional connections
-4. They avoid repetitive phrases, corporate jargon, and formulaic language
-5. They incorporate personal touches that reflect the applicant's unique journey
-6. They demonstrate NHS values through specific examples rather than generic statements
-7. They tell a compelling career narrative that connects past experience to the role
-8. They sound warm, authentic and conversational - like a real person speaking`
-        },
-        {
           role: "user",
-          content: `Please write a compelling NHS job application supporting statement based on this CV and job description analysis. 
-
-First, here's the full CV:
-${cv}
-
-Here's the full job description:
-${jobDescription}
-
-CV Analysis Summary:
-- Relevant skills: ${skills}
-- Clinical experience: ${clinicalExp}
-- Non-clinical experience: ${nonClinicalExp}
-- Administrative experience: ${adminExp}
-- Years of experience: ${analysis.relevantExperience.yearsOfExperience}
-- Education: ${education}
-
-Job Requirements Met:
-${matchedRequirements}
-
-Job Requirements Needing Attention:
-${missingRequirements}
-
-Recommended Highlights:
-- ${highlights}
-
-NHS Values to Emphasize:
-${nhsValues}
-
-${additionalInfo ? `Additional Information Provided by Applicant:
-${additionalInfo}` : ''}
-
-NHS Statement Guidelines:
-${guidelineContent}
-
-Sample Statements for Reference:
-${samplesContent}
-
-Instructions for Human-Like Statement Generation:
-1. Write a compelling supporting statement at ${audienceLevel} reading level
-2. Use varied sentence structures, mixing shorter and longer sentences naturally
-3. Create a personal, conversational tone that feels authentic and genuine
-4. Begin with a strong, personal introduction explaining interest in this specific role
-5. Address each requirement from the job description with specific examples from the CV
-6. For any missing requirements, address them honestly using the additional information provided
-7. Naturally incorporate NHS values throughout - don't just list them
-8. Use transition words sparingly and naturally - avoid obvious formula indicators
-9. Include 1-2 brief anecdotes that demonstrate key qualities (compassion, leadership, etc.)
-10. Include realistic, modest self-reflection on growth and learning
-11. End with a genuine, personal conclusion showing enthusiasm and fit
-12. Keep the statement between 500-800 words with natural paragraph breaks
-13. Format as cohesive paragraphs - no bullet points or headings
-14. MOST IMPORTANT: Make it sound like a real person wrote it, with natural language variations
-15. Do not use generic claims like "I am passionate about" - show passion through specific examples
-16. Write in first person, using "I" naturally throughout
-
-Create a 100% human-like supporting statement that genuinely represents the applicant's experience, skills, and personality while addressing the requirements of this NHS role.`
+          content: promptContent
         }
       ];
       
-      progressCallback?.('Generating statement', 60);
       const response = await AnthropicAPI.callAnthropic(messages, 4000);
       progressCallback?.('Processing AI response', 90);
       

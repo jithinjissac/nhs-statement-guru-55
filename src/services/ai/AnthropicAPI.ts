@@ -1,321 +1,109 @@
 
-import { toast } from 'sonner';
 import { ApiKeyService } from './ApiKeyService';
-import { AnthropicApiClient } from './AnthropicApiClient';
-import { supabase } from '@/integrations/supabase/client';
+import { PromptService, SystemPrompt } from '../PromptService';
 import { StorageService } from '../StorageService';
+import { toast } from 'sonner';
+
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const MAX_RETRIES = 3;
 
 export class AnthropicAPI {
+  private static async getAnthropicKey(): Promise<string> {
+    return ApiKeyService.getApiKey('anthropic');
+  }
+  
   /**
-   * Call to Anthropic API for analysis
+   * Calls the Anthropic API with the given messages and returns the response
    */
   static async callAnthropic(
-    messages: any[], 
-    maxTokens: number = 4000, 
-    updateProgress?: (status: string, percent: number) => void
-  ): Promise<any> {
-    try {
-      // Get API key with improved error handling
-      let apiKey;
+    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+    maxTokens: number = 1024,
+    temperature: number = 0.7,
+    model: string = 'claude-3-sonnet-20240229'
+  ) {
+    let retries = 0;
+    
+    // Prepend system message from the database if not already present
+    if (!messages.some(msg => msg.role === 'system')) {
       try {
-        updateProgress?.('Retrieving API key...', 5);
-        apiKey = await ApiKeyService.getApiKey('anthropic');
-        console.log("API key available:", apiKey ? "Yes" : "No");
-      } catch (keyError) {
-        console.error('Error retrieving API key:', keyError);
-        toast.error('Could not retrieve Anthropic API key. Please check your settings.');
-        throw new Error('Could not retrieve Anthropic API key. Please check your settings.');
+        const systemPrompt = await PromptService.getPromptByKey('system_role');
+        if (systemPrompt) {
+          messages = [
+            { role: 'system', content: systemPrompt.content },
+            ...messages
+          ];
+        }
+      } catch (error) {
+        console.warn('Failed to fetch system role prompt, continuing without it:', error);
       }
-      
-      // Validate messages
-      updateProgress?.('Validating content...', 10);
-      AnthropicApiClient.validateMessages(messages);
-      
-      // Check if messages are too large and warn if necessary
-      const messageSize = JSON.stringify(messages).length;
-      console.log("Message payload size:", messageSize, "bytes");
-      
-      if (messageSize > 80000) {
-        console.warn("Message payload is very large, may cause timeouts");
-        updateProgress?.('Preparing large document for analysis...', 15);
-        toast.warning("Analyzing a large document. This might take up to 2 minutes or more.", {
-          duration: 10000,
+    }
+    
+    while (retries < MAX_RETRIES) {
+      try {
+        const anthropicKey = await this.getAnthropicKey();
+        
+        const response = await fetch(ANTHROPIC_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            max_tokens: maxTokens,
+            temperature
+          })
         });
-      } else {
-        updateProgress?.('Preparing document for analysis...', 15);
-      }
-      
-      // Log request info
-      console.log("Starting Anthropic API call with model claude-3-sonnet-20240229");
-      updateProgress?.('Connecting to AI service...', 20);
-      
-      // Add a loading toast that will be dismissed on success or error
-      const loadingToastId = toast.loading('Analyzing document with AI...', { 
-        duration: 180000 // Extended duration to 3 minutes for larger documents
-      });
-      
-      try {
-        // Prepare payload - simplify to only include required fields
-        const payload = {
-          model: 'claude-3-sonnet-20240229',
-          max_tokens: maxTokens,
-          messages: messages,
-          temperature: 0.7 // Slightly lower temperature for more reliable results
-        };
-
-        console.log("Using Supabase Edge Function to avoid CORS issues");
-        updateProgress?.('Sending data to AI service...', 25);
         
-        // Add progress simulation for long-running requests
-        let progressInterval: number | null = null;
-        let currentProgress = 25;
-        
-        if (updateProgress) {
-          progressInterval = window.setInterval(() => {
-            // Gradually increase progress up to 90% (save last 10% for actual response processing)
-            if (currentProgress < 90) {
-              // Slower progress increases for larger payloads
-              const increment = messageSize > 50000 ? 1 : messageSize > 20000 ? 2 : 4;
-              currentProgress = Math.min(90, currentProgress + increment);
-              
-              const statusMessages = [
-                'AI analyzing your documents...',
-                'Matching your CV with job requirements...',
-                'Processing experience details...',
-                'Identifying skill matches...',
-                'Analyzing qualifications...',
-                'Building response...'
-              ];
-              
-              const statusIndex = Math.floor((currentProgress - 25) / 15);
-              const status = statusMessages[Math.min(statusIndex, statusMessages.length - 1)];
-              
-              updateProgress(status, currentProgress);
-            }
-          }, 1000); // Update every second
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(`Anthropic API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
         }
         
-        try {
-          // Call via Supabase Edge Function with increased timeout handling
-          const result = await supabase.functions.invoke('anthropic-proxy', {
-            body: {
-              apiKey,
-              payload
-            },
-            // No timeout option available in supabase.functions.invoke
-            // We'll handle timeout in the edge function itself
-          });
-          
-          // Clear the progress interval if it exists
-          if (progressInterval !== null) {
-            clearInterval(progressInterval);
-          }
-          
-          // Set progress to 95% to indicate we're processing the response
-          updateProgress?.('Processing AI response...', 95);
-          
-          // Clear the loading toast
-          toast.dismiss(loadingToastId);
-          
-          if (result.error) {
-            console.error('Edge function error:', result.error);
-            
-            // If the error is likely a timeout, try with direct fetch as a fallback
-            if (result.error.message?.includes('timeout') || 
-                result.error.message?.includes('timed out') ||
-                result.error.status === 504) {
-              
-              console.log("Edge function timed out, trying direct fetch as fallback");
-              updateProgress?.('Edge function timed out, trying direct approach...', 60);
-              
-              // Try with direct fetch as fallback
-              return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
-            }
-            
-            // Handle specific error cases with user-friendly messages
-            const errorMessage = result.error.message || '';
-            
-            if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-              toast.error('The analysis took too long to complete. The app will try a different approach now.');
-              // Try with direct fetch as fallback
-              return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
-            } else if (errorMessage.includes('API key') || errorMessage.includes('invalid_api_key')) {
-              toast.error('Invalid API key. Please check your Anthropic API key in Settings.');
-              throw new Error('Invalid API key. Please update it in Settings.');
-            } else if (errorMessage.includes('rate_limit')) {
-              toast.error('Rate limit exceeded. Please try again in a few minutes.');
-              throw new Error('Rate limit exceeded. Please try again later.');
-            } else if (errorMessage.includes('invalid_request') || errorMessage.includes('extra fields')) {
-              toast.error('There was an issue with the request format. Try simplifying your analysis.');
-              throw new Error('Invalid request format. Please try again with simpler content.');
-            } else {
-              toast.error('Error connecting to AI service. Trying alternative method...');
-              // Try with direct fetch as fallback
-              return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
-            }
-          }
-          
-          if (!result.data) {
-            toast.error('No data returned from AI service. Trying alternative method...');
-            // Try with direct fetch as fallback
-            return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
-          }
-          
-          // Update progress to 100%
-          updateProgress?.('Analysis complete!', 100);
-          
-          toast.success('Analysis completed successfully!');
-          console.log("Anthropic API call via Edge Function completed successfully");
-          return result.data;
-        } catch (error) {
-          // Clear the progress interval if it exists
-          if (progressInterval !== null) {
-            clearInterval(progressInterval);
-          }
-          
-          console.error("Error with Edge Function, trying direct fetch:", error);
-          updateProgress?.('Trying alternative approach...', 60);
-          
-          // Try with direct fetch as fallback
-          return await AnthropicAPI.directFetchCallAnthropic(apiKey, payload, updateProgress);
+        return await response.json();
+      } catch (error) {
+        console.error(`Anthropic API call failed (attempt ${retries + 1}/${MAX_RETRIES}):`, error);
+        retries++;
+        
+        // Throw immediately if it's an API key or similar issue
+        if (error.toString().toLowerCase().includes('api key') || 
+            error.toString().toLowerCase().includes('auth') || 
+            error.toString().toLowerCase().includes('401') || 
+            error.toString().toLowerCase().includes('403')) {
+          throw error;
         }
-      } finally {
-        // Ensure loading toast is dismissed in all cases
-        toast.dismiss(loadingToastId);
+        
+        // If we've reached max retries, throw the error
+        if (retries >= MAX_RETRIES) {
+          throw error;
+        }
+        
+        // Wait with exponential backoff before retrying
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries) * 1000));
       }
-    } catch (error) {
-      console.error('Error calling Anthropic API:', error);
-      // Show user-friendly toast if not already shown
-      if (!error.message?.includes('timeout') && 
-          !error.message?.includes('API key') && 
-          !error.message?.includes('Rate limit') &&
-          !error.message?.includes('Invalid request format')) {
-        toast.error(error.message || 'Failed to connect to Anthropic API. Please try again later.');
-      }
-      throw error;
     }
-  }
-
-  /**
-   * Direct fetch to Anthropic API as fallback when the Edge Function fails
-   */
-  static async directFetchCallAnthropic(
-    apiKey: string, 
-    payload: any,
-    updateProgress?: (status: string, percent: number) => void
-  ): Promise<any> {
-    console.log("Attempting direct fetch to Anthropic API");
-    updateProgress?.('Trying direct connection to AI service...', 65);
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 120000); // 2 minute timeout
-    
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Anthropic API error: ${errorData.error?.message || response.statusText}`);
-      }
-      
-      updateProgress?.('Processing AI response...', 95);
-      const data = await response.json();
-      
-      updateProgress?.('Analysis complete!', 100);
-      toast.success('Analysis completed successfully with direct method!');
-      
-      return data;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      
-      if (error.name === 'AbortError') {
-        throw new Error('The request timed out after 2 minutes. Please try with less content.');
-      }
-      
-      throw error;
-    }
+    throw new Error(`Failed to call Anthropic API after ${MAX_RETRIES} attempts`);
   }
-
+  
   /**
-   * Get guidelines and sample statements to enhance AI generation
+   * Gets NHS statement resources from storage or fallback
    */
   static async getNHSStatementResources() {
     try {
-      // Directly fetch from local storage for reliability with database issues
-      const getLocalGuidelines = () => {
-        const guidelinesJSON = localStorage.getItem('nhs_guidelines');
-        return guidelinesJSON ? JSON.parse(guidelinesJSON) : [];
-      };
-      
-      const getLocalSampleStatements = () => {
-        const samplesJSON = localStorage.getItem('nhs_samples');
-        return samplesJSON ? JSON.parse(samplesJSON) : [];
-      };
-      
-      // Get data from local storage - more reliable with current DB issues
-      const guidelines = getLocalGuidelines();
-      const sampleStatements = getLocalSampleStatements();
-      
-      console.log(`Retrieved ${guidelines.length} guidelines and ${sampleStatements.length} sample statements from local storage`);
-      
-      // Additional NHS supporting statement guidelines - these complement the user-added guidelines
-      const nhsSupportingStatementGuidelines = [
-        {
-          title: "Purpose of an NHS Supporting Statement",
-          content: "The purpose of a supporting statement is to demonstrate you are the right person for the job, show you're applying for the right reasons, and meet all criteria in the job pack. It should address each criterion in the person specification with evidence."
-        },
-        {
-          title: "Supporting Statement Structure",
-          content: "Start with an attention-grabbing introduction explaining why you're applying. In the main body, address each criterion with specific examples using the STAR method (Situation, Task, Action, Result). End with a strong conclusion highlighting key strengths and how you embody NHS values."
-        },
-        {
-          title: "What NHS Employers Look For",
-          content: "Employers assess how well you meet criteria with specific examples, your alignment with NHS values, genuine passion for the role, evidence of research about the organization, and attention to detail in your writing."
-        },
-        {
-          title: "NHS Values to Emphasize",
-          content: "Working together for patients, Respect and dignity, Commitment to quality of care, Compassion, Improving lives, Everyone counts. Always demonstrate how your experience aligns with these core values."
-        },
-        {
-          title: "Using Personal Language",
-          content: "Write in first person with natural language variations. Include personal reflections on your healthcare journey and authentic motivations for working in the NHS. Avoid formulaic or robotic phrasing."
-        },
-        {
-          title: "Human-Like Writing Style",
-          content: "Use varied sentence structures, occasional contractions, and personal anecdotes. Incorporate thoughtful reflections on your experiences and motivations. Write as if speaking directly to another person, with warmth and authenticity. Avoid overly formal language or repetitive structures."
-        }
-      ];
-      
-      // Combine locally fetched guidelines with the NHS-specific ones
-      const enhancedGuidelines = [...guidelines, ...nhsSupportingStatementGuidelines];
+      const guidelines = await StorageService.getGuidelines();
+      const sampleStatements = await StorageService.getSampleStatements();
       
       return {
-        guidelines: enhancedGuidelines,
+        guidelines,
         sampleStatements
       };
     } catch (error) {
-      console.error('Error retrieving NHS statement resources:', error);
-      // Return default values if there's an error
+      console.error('Error loading NHS resources, using fallbacks:', error);
       return {
-        guidelines: [
-          {
-            title: "Human-Like Writing Style",
-            content: "Use varied sentence structures, occasional contractions, and personal anecdotes. Incorporate thoughtful reflections on your experiences and motivations. Write as if speaking directly to another person, with warmth and authenticity. Avoid overly formal language or repetitive structures."
-          }
-        ],
+        guidelines: [],
         sampleStatements: []
       };
     }

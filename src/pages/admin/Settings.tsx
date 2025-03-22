@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,10 +9,11 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { AIService, AIModelConfig } from '@/services/ai';
 import { StorageService } from '@/services/StorageService';
-import { AlertCircle, CheckCircle2, Key, Info, ShieldAlert } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Key, Info, ShieldAlert, FileText } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from "@/integrations/supabase/client";
+import PromptsTab from '@/components/admin/PromptsTab';
 
 const AdminSettings: React.FC = () => {
   // Get authentication status
@@ -288,9 +288,10 @@ const AdminSettings: React.FC = () => {
       )}
       
       <Tabs defaultValue="api-keys" className="space-y-6">
-        <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-8">
+        <TabsList className="grid w-full max-w-md mx-auto grid-cols-4 mb-8">
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="models">AI Models</TabsTrigger>
+          <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="general">General</TabsTrigger>
         </TabsList>
         
@@ -430,6 +431,11 @@ const AdminSettings: React.FC = () => {
               </Button>
             </CardFooter>
           </Card>
+        </TabsContent>
+        
+        {/* Prompts Tab */}
+        <TabsContent value="prompts" className="space-y-6">
+          <PromptsTab />
         </TabsContent>
         
         {/* General Settings Tab */}
